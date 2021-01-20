@@ -36,6 +36,12 @@ Have not tried this at all, but looks promising. Python package for MIDI synthes
 
 https://mdoege.github.io/PySynth/
 
+Python implementation for FluidSynth, which is a software MIDI Synthesizer. Very promising because FluidSynth is the backend for VLC Media player, which is able to synthesize and play midi files on windows. 
+
+Also available as a pip package.
+
+https://pypi.org/project/pyFluidSynth/
+
 # WAV to MIDI 
 
 Possible solution. Again... havn't really tried it yet. Tried other ones that didn't work.
