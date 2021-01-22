@@ -10,7 +10,8 @@ To explore different software solutions, we can use Jupyter notebooks that separ
 
 3) Run `conda activate BB`. You should now see (BB) on the left side of your command-line. 
 
-Note: These first 3 steps set up a Python environment with the packages specified in `environment.yml`. This allows the `import` statements in the notebooks to work. If a import is failing, make sure the package is listed in the environment file.
+Note: These first 3 steps set up a Python environment with the packages specified in `environment.yml`. This allows the `import` statements in the notebooks to work. If a import is failing, make sure the package is listed in the environment file. If you add a package to the file, you will have to update the environment. You can do this by running `conda env update -f environment.yml` or by running both `conda env remove -n BB` and `conda env create -f environment.yml` again.
 
 4) Run `jupyter notebook`. This will start a jupyter server and open up a web-page which exposes the current directory. You can then open up any notebook file `.IPYNB` 
+
 
