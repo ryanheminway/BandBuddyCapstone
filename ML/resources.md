@@ -52,6 +52,10 @@ Found how Magenta does their "audio to midi" translation. They use this Librosa 
 
 https://librosa.org/doc/latest/index.html
 
+List of WAV to MIDI resources
+
+https://gist.github.com/natowi/d26c7e97443ec97e8032fb7e7596f0b0
+
 # MIDI resources / packages 
 
 https://pypi.org/project/MIDIFile/
