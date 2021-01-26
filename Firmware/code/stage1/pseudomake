@@ -1,0 +1,2 @@
+# i absolutely despise makefiles
+g++ -g -o analog2wav analog2wav.cpp -lasound
