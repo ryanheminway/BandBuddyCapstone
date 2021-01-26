@@ -407,5 +407,5 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    return write_to_wav("from_pi.wav");  
+    return write_to_wav("/home/patch/from_pi.wav");  
 }
