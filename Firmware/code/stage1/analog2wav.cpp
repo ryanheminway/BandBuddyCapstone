@@ -3,6 +3,8 @@
 #include <errno.h>
 #include <poll.h>
 #include <alsa/asoundlib.h>
+#include <signal.h>
+#include <atomic>
 
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
@@ -25,7 +27,7 @@
 // The size of the internal ring buffer in the capture device: fit at least two periods
 #define PCM_RING_BUFFER_SIZE (BYTES_PER_FRAME * FRAMES_PER_PERIOD * 2)
 
-// For now, hold 64 periods in the mem buffer
+// For now, hold 1024 periods in the mem buffer
 #define PERIODS_IN_WAV_BUFFER 1024
 #define WAV_BUFFER_SIZE BYTES_PER_PERIOD * PERIODS_IN_WAV_BUFFER
 static uint8_t buffer[WAV_BUFFER_SIZE];
@@ -36,6 +38,20 @@ static snd_pcm_t* capture_handle;
 
 // The ALSA capture device name to use
 static const char* alsa_capture_device_name = "plughw:CARD=pisound";
+
+
+// Cancel atomic: set high when the button is pressed
+std::atomic_bool is_button_pressed;
+
+// The number of bytes read in total 
+static int num_bytes_read = 0;
+
+// Button press handler
+void button_pressed(int sig)
+{
+    // Which memory order to use here? 
+    is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
+}
 
 // Print an error and its snd string message to stderr.
 void print_error(int err, const char* message, ...)
@@ -168,13 +184,15 @@ int start_device_and_record()
         print_error(err, "Could not start the capture device!"); return err;
     }
 
-    int buffer_index = 0;
-    while (buffer_index + BYTES_PER_PERIOD < WAV_BUFFER_SIZE)
-    { 
-        if (buffer_index >= 6000) 
+    num_bytes_read = 0;
+    while (num_bytes_read + BYTES_PER_PERIOD < WAV_BUFFER_SIZE)
+    {
+        // If the button has been pressed, stop recording 
+        if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
         {
-            int i = 1; i++;
+            break;
         }
+
         // Await a new set of data
         if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
         {
@@ -189,15 +207,29 @@ int start_device_and_record()
         }
 
         // Print here etc
-        if ((err = snd_pcm_readi(capture_handle, buffer + buffer_index, frames_available)) != frames_available)
+        if ((err = snd_pcm_readi(capture_handle, buffer + num_bytes_read, frames_available)) != frames_available)
         {
             print_error(err, "Frame read failed!"); return err;
         }
 
-        buffer_index += BYTES_PER_PERIOD;
+        num_bytes_read += BYTES_PER_PERIOD;
     }
 
+    // If the button has not been pressed, we ran out of space!
+    if (!is_button_pressed.load(std::memory_order::memory_order_relaxed))
+    {
+        fprintf(stderr, "%s", "Recording ran out of memory!\n"); return 0;
+    } 
+    #warning *** MEMORY OVERFLOW TEMPORARILY DOES NOT ERROR - FIX THIS POST DEBUG SESSION!!!
+
+    // !TODO flush the capture buffer? 
+
     return 0;
+}
+
+int close_capture_handle()
+{
+    return snd_pcm_close(capture_handle);
 }
 
 int record_audio()
@@ -215,26 +247,15 @@ int record_audio()
     }
 
     // Start the device and record
-    return start_device_and_record();
+    int err = start_device_and_record();
+
+    // Close the capture device, even on error
+    err |=  close_capture_handle();
+
+    return err; 
 }
 
-uint8_t TEMP_WAVE_HEADER[44] = {
-    'R', 'I', 'F', 'F',             // 'RIFF'
-    0x24, 0x00, 0x18, 0x00,         // ChunkSize
-    0x57, 0x41, 0x56, 0x45,         // 'WAVE'
-    0x66, 0x6d, 0x74, 0x20,         // 'fmt '
-    0x10, 0x00, 0x00, 0x00,         // Subchunk1Size
-    0x01, 0x00,                     // AudioFormat (1 = PCM)
-    0x02, 0x00,                     // NumChannels
-    0x80, 0xbb, 0x00, 0x00,         // SampleRate
-    0x00, 0xee, 0x02, 0x00,         // ByteRate
-    0x04, 0x00,                     // BlockAlign
-    0x10, 0x00,                     // BitsPerSample
-    0x64, 0x61, 0x74, 0x61,         // 'data'
-    0x00, 0x00, 0x18, 0x00          // Subchunk2Size
-}; 
-
-int calculate_header_values(uint32_t* chunk_size, uint16_t* num_channels, uint32_t* sample_rate, uint32_t* byte_rate, 
+void calculate_header_values(uint32_t* chunk_size, uint16_t* num_channels, uint32_t* sample_rate, uint32_t* byte_rate, 
     uint16_t* block_align, uint16_t* bits_per_sample, uint32_t* subchunk_size)
 {
     // Some of these are #defined for now
@@ -248,8 +269,8 @@ int calculate_header_values(uint32_t* chunk_size, uint16_t* num_channels, uint32
     // Byte rate = Sample rate * # channels * bytes/sample
     *byte_rate = SAMPLE_RATE * NUM_CHANNELS * BYTES_PER_SAMPLE;
 
-    // Subchunk size = # samples * # channels * bytes/sample = sizeof(buffer) I believe? 
-    *subchunk_size = WAV_BUFFER_SIZE;
+    // Subchunk size = # samples * # channels * bytes/sample = num_bytes_read I believe? 
+    *subchunk_size = num_bytes_read;
 
     // Chunk size = subchunk size * header size 
     *chunk_size = WAV_BUFFER_SIZE + 36;
@@ -336,7 +357,7 @@ int write_wav_header(FILE* file)
 int write_wav_data(FILE* file)
 {
     int num_bytes_written;
-    if ((num_bytes_written = fwrite(buffer, sizeof(uint8_t), WAV_BUFFER_SIZE, file)) != WAV_BUFFER_SIZE)
+    if ((num_bytes_written = fwrite(buffer, sizeof(uint8_t), num_bytes_read, file)) != num_bytes_read)
     {
         fprintf(stderr, "Wav data write failed: Expected %d, wrote %d!", WAV_BUFFER_SIZE, num_bytes_written);
         return 1;
@@ -372,26 +393,19 @@ int write_to_wav(const char* path)
     return 0;
 }
 
-void clean_up()
-{ 
-    // Close the capture device
-    snd_pcm_close(capture_handle);
-}
-
 int main(int argc, char* argv[])
 {
+    // Register button press signal handler
+    signal(SIGINT, button_pressed);
+
     // This will change as the module evolves
     int err = record_audio();
 
+    // If recording failed, don't write the WAV file
     if (err)
     {
-        clean_up();
         return 1;
     }
 
-    err = write_to_wav("from_pi.wav");
- 
-    clean_up();
-
-    return err;
+    return write_to_wav("from_pi.wav");  
 }
