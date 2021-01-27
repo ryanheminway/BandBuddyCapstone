@@ -5,7 +5,7 @@
 #include <alsa/asoundlib.h>
 #include <signal.h>
 #include <atomic>
-
+#include <stdint.h>
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
 

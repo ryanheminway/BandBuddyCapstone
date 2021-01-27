@@ -1,18 +1,20 @@
 CROSS_PREFIX := /pitools/arm-bcm2708/arm-rpi-4.9.3-linux-gnueabihf/bin/arm-linux-gnueabihf-
-CC           := $(CROSS_PREFIX)gcc
+CC           := $(CROSS_PREFIX)g++
 
-OBJS 		 := test.o
-CFLAGS		 := -Wall -Werror
-TARGET		 := test
-
+OBJS 		 := analog2wav.o
+CFLAGS		 := -std=c++11
+TARGET		 := analog2wave
+LIB			 := -lasound
+INCLUDE		 := -I/usr/include/
+LIB_PATH	 := -L/usr/lib
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS)  -o  $@ $^ $(LIB_PATH) $(LIB)
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< 
+%.o: %.cpp
+	$(CC) $(CFLAGS) -c  $(INCLUDE) $< 
 
 clean:
 	rm -f $(TARGET) $(OBJS)
