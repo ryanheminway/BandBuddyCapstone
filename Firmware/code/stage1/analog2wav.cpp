@@ -220,18 +220,24 @@ int record_until_button_press()
         }
 
         snd_pcm_sframes_t frames_available = snd_pcm_avail_update(capture_handle);
-        if (frames_available != FRAMES_PER_PERIOD)
+        if (frames_available < FRAMES_PER_PERIOD)
         {
-            fprintf(stderr, "Incorrect available frames: expected %d, received %d!\n", FRAMES_PER_PERIOD, frames_available);
+            fprintf(stderr, "Too few frames received: expected %d, received %d!\n", FRAMES_PER_PERIOD, frames_available);
             return 1;
         }
+        
+        // If there were more frames available than expected, report it - if this happens many times in a row, we might get an overrun
+        if (frames_available != FRAMES_PER_PERIOD)
+        {
+            fprintf(stderr, "Expected %d frames, but %d are ready. Monitor for overflow?", FRAMES_PER_PERIOD, frames_available);
+        }
 
-        // Print here etc
-        if ((err = snd_pcm_readi(capture_handle, buffer + num_bytes_read, frames_available)) != frames_available)
+        // Read one period, even if more is available
+        if ((err = snd_pcm_readi(capture_handle, buffer + num_bytes_read, FRAMES_PER_PERIOD)) != FRAMES_PER_PERIOD)
         {
             print_error(err, "Frame read failed!"); return err;
         }
-
+        
         num_bytes_read += BYTES_PER_PERIOD;
     }
 
@@ -243,7 +249,7 @@ int record_until_button_press()
 
     #warning *** MEMORY OVERFLOW TEMPORARILY DOES NOT ERROR - FIX THIS POST DEBUG SESSION!!!
 
-    // !TODO flush the capture buffer? 
+    // !TODO flush the capture buffer!!!
 
     if ((err = snd_pcm_close(capture_handle)) < 0)
     {
@@ -256,29 +262,6 @@ int record_until_button_press()
 int close_capture_handle()
 {
     return snd_pcm_close(capture_handle);
-}
-
-int record_audio()
-{
-    // Init the capture handle 
-    if (init_capture_handle())
-    {
-        return 1;
-    }
-
-    // Prepare the capture device
-    if (prepare_capture_device())
-    {
-        return 1;
-    }
-
-    // Start the device and record
-    int err = record_until_button_press();
-
-    // Close the capture device, even on error
-    err |=  close_capture_handle();
-
-    return err; 
 }
 
 void calculate_header_values(uint32_t* chunk_size, uint16_t* num_channels, uint32_t* sample_rate, uint32_t* byte_rate, 
@@ -426,7 +409,6 @@ int main(int argc, char* argv[])
 
     int err = 0;
 
-    int i = 0;
     while (1)
     {
         // Reset the button press status 
@@ -445,34 +427,26 @@ int main(int argc, char* argv[])
             return err;
         }
 
-        // Await a button press 
-        fprintf(stdout, "%s", "awaiting button press...\n");
+        // Await a button press
         await_button_press();
 
         // Record 
-        fprintf(stdout, "%s", "recording...\n");
         if ((err = record_until_button_press()))
         {
             break;
         }
 
         // Write to wav
-        fprintf(stdout, "%s", "writing...\n");
         if ((err = write_to_wav("/home/patch/from_pi.wav")))
         {
             break;
         }  
 
         // !TEMP 
-        if (i++ == 2)
-        {
-            break;
-        }
+        break;
     }
 
     // Cleanup
-    fprintf(stdout, "%s", "cleaning up...\n");
-
     if (err)
     {
         close_capture_handle();
