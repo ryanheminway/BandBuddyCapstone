@@ -5,6 +5,8 @@
 #include <alsa/asoundlib.h>
 #include <signal.h>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
@@ -43,6 +45,12 @@ static const char* alsa_capture_device_name = "plughw:CARD=pisound";
 // Cancel atomic: set high when the button is pressed
 std::atomic_bool is_button_pressed;
 
+// The mutex upon which to lock the condition variable
+std::mutex is_button_pressed_mutex;
+
+// The condition variable upon which to alert a button press
+std::condition_variable is_button_pressed_cv;
+
 // The number of bytes read in total 
 static int num_bytes_read = 0;
 
@@ -51,6 +59,19 @@ void button_pressed(int sig)
 {
     // Which memory order to use here? 
     is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
+    is_button_pressed_cv.notify_one();
+}
+
+void await_button_press()
+{ 
+    // Acquire the mutex and await the condition variable
+    std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
+
+    // Lambda prevents spurious wakeups
+    is_button_pressed_cv.wait(lock, [&](){ return is_button_pressed.load(std::memory_order::memory_order_seq_cst); });
+
+    // Reset the button status to unpressed
+    is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
 }
 
 // Print an error and its snd string message to stderr.
@@ -172,11 +193,10 @@ int prepare_capture_device()
     {
         print_error(err, "Could not prepare the capture device!");
     }
-
     return err;
 }
 
-int start_device_and_record()
+int record_until_button_press()
 {
     int err; 
     if ((err = snd_pcm_start(capture_handle)) < 0)
@@ -220,9 +240,15 @@ int start_device_and_record()
     {
         fprintf(stderr, "%s", "Recording ran out of memory!\n"); return 0;
     } 
+
     #warning *** MEMORY OVERFLOW TEMPORARILY DOES NOT ERROR - FIX THIS POST DEBUG SESSION!!!
 
     // !TODO flush the capture buffer? 
+
+    if ((err = snd_pcm_close(capture_handle)) < 0)
+    {
+        print_error(err, "Could not pause the capture device!"); return err;
+    }
 
     return 0;
 }
@@ -247,7 +273,7 @@ int record_audio()
     }
 
     // Start the device and record
-    int err = start_device_and_record();
+    int err = record_until_button_press();
 
     // Close the capture device, even on error
     err |=  close_capture_handle();
@@ -372,20 +398,20 @@ int write_to_wav(const char* path)
     FILE* file = fopen(path, "w");
     if (!file)
     {
-        fprintf(stderr, "Failed to open file %s!", path);
+        fprintf(stderr, "Failed to open file %s!\n", path);
         return 1;
     }
 
     if (write_wav_header(file))
     {
-        fprintf(stderr, "Failed to write WAV header!");
+        fprintf(stderr, "Failed to write WAV header!\n");
         fclose(file);
         return 1;
     }
 
     if (write_wav_data(file))
     {
-        fprintf(stderr, "Failed to write WAV data!");
+        fprintf(stderr, "Failed to write WAV data!\n");
         fclose(file);
         return 1;
     }
@@ -398,14 +424,59 @@ int main(int argc, char* argv[])
     // Register button press signal handler
     signal(SIGINT, button_pressed);
 
-    // This will change as the module evolves
-    int err = record_audio();
+    int err = 0;
 
-    // If recording failed, don't write the WAV file
-    if (err)
+    int i = 0;
+    while (1)
     {
-        return 1;
+        // Reset the button press status 
+        is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
+
+        // Init the capture handle 
+        err = init_capture_handle();
+        if (err) 
+        {
+            return err;
+        }
+
+        // Prepare the capture handle
+        if ((err = prepare_capture_device()))
+        {
+            return err;
+        }
+
+        // Await a button press 
+        fprintf(stdout, "%s", "awaiting button press...\n");
+        await_button_press();
+
+        // Record 
+        fprintf(stdout, "%s", "recording...\n");
+        if ((err = record_until_button_press()))
+        {
+            break;
+        }
+
+        // Write to wav
+        fprintf(stdout, "%s", "writing...\n");
+        if ((err = write_to_wav("/home/patch/from_pi.wav")))
+        {
+            break;
+        }  
+
+        // !TEMP 
+        if (i++ == 2)
+        {
+            break;
+        }
     }
 
-    return write_to_wav("/home/patch/from_pi.wav");  
+    // Cleanup
+    fprintf(stdout, "%s", "cleaning up...\n");
+
+    if (err)
+    {
+        close_capture_handle();
+    }
+
+    return err;
 }
