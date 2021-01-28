@@ -12,7 +12,6 @@ if [[ -n "$PGREP" ]]; then
     log "analog2wav running - sending SIGINT!"
     killall -s SIGINT analog2wav
 else 
-    # Spawn the analog2wav process
-    log "analog2wav not running - spawning now!"
-    /home/patch/BandBuddyCapstone/Firmware/code/stage1/analog2wav &
+    # Record a failure 
+    log "analog2wav not running!!!"
 fi
