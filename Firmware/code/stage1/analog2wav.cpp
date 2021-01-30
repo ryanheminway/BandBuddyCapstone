@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <atomic>
 #include <stdint.h>
+#include "shared_mem.h"
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
 
@@ -397,6 +398,9 @@ int main(int argc, char* argv[])
 {
     // Register button press signal handler
     signal(SIGINT, button_pressed);
+
+    //get memory block 
+    char *shared_mem_blk = (char *)attach_mem_blk(FILE_NAME, BLK_SIZE);
 
     // This will change as the module evolves
     int err = record_audio();
