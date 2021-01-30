@@ -11,6 +11,7 @@ int main(void){
        printf("Could not get memory block\n");
     }
 
+    printf("Writing data to shared memory\n");
     memcpy(mem_blk, message, strlen(message)+1);
 
     detach_mem_blk(mem_blk);
