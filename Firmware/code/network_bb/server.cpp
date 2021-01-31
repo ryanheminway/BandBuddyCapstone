@@ -1,3 +1,10 @@
+/*
+
+Thanks geeksforgeeks.com for providing the skeleton for our server.
+The skeleton code can be found at https://www.geeksforgeeks.org/socket-programming-in-cc-handling-multiple-clients-on-server-without-multi-threading/
+*/
+
+
 #include <stdio.h>  
 #include <string.h>   //strlen  
 #include <stdlib.h>  
