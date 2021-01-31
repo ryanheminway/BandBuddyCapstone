@@ -42,10 +42,11 @@ void *attach_mem_blk(char *file_name, int size){
     }
     return ret;
 }
+
 //after proccess is done with memory, it should detach using this function 
-//@param blk --->
+//@param blk ---> pointer to shared mem block
  bool detach_mem_blk(void *blk_ptr){
-     return (shmdt(blk_ptr) != IPC_ERROR);
+    return (shmdt(blk_ptr) != IPC_ERROR);
  }
 
 //when there are no more processes using the memory block, it should be destroyed to free up memory using this function
