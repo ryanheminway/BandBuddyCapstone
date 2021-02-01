@@ -1,0 +1,8 @@
+namespace Server.Header;
+
+table Header {
+    size:uint32 = 4;
+}
+
+
+root_type Header;
