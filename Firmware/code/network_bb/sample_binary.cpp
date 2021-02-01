@@ -15,8 +15,10 @@
  */
 
 #include "monster_generated.h"  // Already includes "flatbuffers/flatbuffers.h".
+#include "header_generated.h"
 
 using namespace MyGame::Sample;
+using namespace Server::Header;
 
 // Example how to use FlatBuffers to create and read binary buffers.
 
@@ -62,12 +64,26 @@ int main(int /*argc*/, const char * /*argv*/[]) {
   auto fb_ptr = builder.GetBufferPointer();
   auto size = builder.GetSize();
 
-  printf("Size of flatbuffer message = %d\n", size);
+  builder.Clear(); // I can use the same builder again right?
+
+  auto orc_header = CreateHeader(builder, size);
+  builder.Finish(orc_header);
+
+  auto orc_header_ptr = builder.GetBufferPointer();
+  auto orc_header_size = builder.GetSize();
+
+  auto header = GetHeader(orc_header_ptr);
+
+  printf("Size1 %d\n", header->size());
+  printf("Size2 %d\n", header->size_2());
+
+  printf("Size of fbb = %d\n", size);
+  printf("Size of orc_header= %d\n", orc_header_size);
 
   // Instead, we're going to access it right away (as if we just received it).
 
   // Get access to the root:
-  auto monster = GetMonster(builder.GetBufferPointer());
+  auto monster = GetMonster(fb_ptr);
 
   // Get and test some scalar types from the FlatBuffer.
   assert(monster->hp() == 80);

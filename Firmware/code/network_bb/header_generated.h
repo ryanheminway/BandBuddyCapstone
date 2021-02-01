@@ -15,14 +15,19 @@ struct HeaderBuilder;
 struct Header FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef HeaderBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_SIZE = 4
+    VT_SIZE = 4,
+    VT_SIZE_2 = 6
   };
   uint32_t size() const {
     return GetField<uint32_t>(VT_SIZE, 4);
   }
+  uint32_t size_2() const {
+    return GetField<uint32_t>(VT_SIZE_2, 5);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_SIZE) &&
+           VerifyField<uint32_t>(verifier, VT_SIZE_2) &&
            verifier.EndTable();
   }
 };
@@ -33,6 +38,9 @@ struct HeaderBuilder {
   flatbuffers::uoffset_t start_;
   void add_size(uint32_t size) {
     fbb_.AddElement<uint32_t>(Header::VT_SIZE, size, 4);
+  }
+  void add_size_2(uint32_t size_2) {
+    fbb_.AddElement<uint32_t>(Header::VT_SIZE_2, size_2, 5);
   }
   explicit HeaderBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -47,8 +55,10 @@ struct HeaderBuilder {
 
 inline flatbuffers::Offset<Header> CreateHeader(
     flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t size = 4) {
+    uint32_t size = 4,
+    uint32_t size_2 = 5) {
   HeaderBuilder builder_(_fbb);
+  builder_.add_size_2(size_2);
   builder_.add_size(size);
   return builder_.Finish();
 }

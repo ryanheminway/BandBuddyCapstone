@@ -2,6 +2,7 @@ namespace Server.Header;
 
 table Header {
     size:uint32 = 4;
+    size_2:uint32 = 5;
 }
 
 
