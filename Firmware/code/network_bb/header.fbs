@@ -1,12 +1,14 @@
 namespace Server.Header;
-//add enum for destinations 
-//add enum for command
-table Header {
-    size:uint32 = 4;
-    destination:ubyte = 0;
-    cmd:ubyte = 0;
-    stage_id:ubyte = 0;
-}
 
+enum Stages:ubyte {Stage1 = 0, Stage2, Stage3 = 2}
+
+enum Cmds:ubyte {Register = 0, Stage1_data_ready, Stage2_data_ready, Stage3_data_ready = 3}
+
+table Header {
+    size:uint32;
+    destination:Stages;
+    cmd:Cmds;
+    stage_id:Stages;
+}
 
 root_type Header;
