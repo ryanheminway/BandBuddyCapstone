@@ -5,7 +5,7 @@
 #define FAILED  (-1)
 
 int get_header_size();
-int *get_socket_discriptor();
+int get_socket_discriptor();
 int create_header();
 int register_stage(const int &socket_fd, int stage);
 

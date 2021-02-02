@@ -12,13 +12,13 @@
 
 using namespace Server::Header; 
 
-int *get_socket_discriptor(){
-    int *sockfd_ptr = (int *)malloc(sizeof(int));
+int get_socket_discriptor(){
+    int sockfd = 0; 
     struct sockaddr_in servaddr; 
   
     // socket create and varification 
-    *sockfd_ptr = socket(AF_INET, SOCK_STREAM, 0); 
-    if (*sockfd_ptr == -1) { 
+    sockfd = socket(AF_INET, SOCK_STREAM, 0); 
+    if (sockfd == -1) { 
         printf("socket creation failed...\n"); 
         exit(0); 
     } 
@@ -32,14 +32,14 @@ int *get_socket_discriptor(){
     servaddr.sin_port = htons(PORT); 
   
     // connect the client socket to server socket 
-    if (connect(*sockfd_ptr, (SA*)&servaddr, sizeof(servaddr)) != 0) { 
+    if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0) { 
         printf("connection with the server failed...\n"); 
         exit(0); 
     } 
     else
         printf("connected to the server..\n"); 
 
-    return sockfd_ptr;
+    return sockfd;
 }
 
 int get_header_size(){
