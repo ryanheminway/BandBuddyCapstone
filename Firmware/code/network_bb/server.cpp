@@ -140,14 +140,20 @@ int main(int argc , char *argv[])
             printf("Welcome message sent successfully");   
                  
             //add new socket to array of sockets  
-            //TODO: listen to incoming message. This is a register message that contains information about which stage just connected 
+            //TODO: listen to incoming flatbuffer. This is a register message that contains information about which stage just connected 
             /*
                 stage1 should be mapped to client_socket[1]
                 stage2 should be mapped to client_socket[2]
             */
             for (i = 0; i < MAX_CLIENTS; i++)   
             {   
-                //if position is empty  
+                //if position is empty  i == stage_id from flatbuffer
+
+                /*
+                    i == stage_id
+                    client_socket[stage_id] = new_socket;
+
+                */
                 if( client_socket[i] == 0 )   
                 {   
                     client_socket[i] = new_socket;   
@@ -155,7 +161,7 @@ int main(int argc , char *argv[])
                          
                     break;   
                 }   
-            }   
+            }  
         }   
              
         //else its some IO operation on some other socket 
@@ -168,7 +174,7 @@ int main(int argc , char *argv[])
                 //Check if it was for closing , and also read the  
                 //incoming message  
                 //TODO: Needs to be replaced with handler to retrieve flatbuffer 
-                //TODO: How to we calculate size of flatbuffer? Send a header of predertimed size? 
+                //TODO: Read header. Read all of the remaining data. serialize flatbuffer  
                 if ((valread = read( sd , buffer, 1024)) == 0)   
                 {   
                     //Somebody disconnected , get his details and print  

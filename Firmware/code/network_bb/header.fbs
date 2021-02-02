@@ -1,8 +1,11 @@
 namespace Server.Header;
-
+//add enum for destinations 
+//add enum for command
 table Header {
     size:uint32 = 4;
-    size_2:uint32 = 5;
+    destination:ubyte = 0;
+    cmd:ubyte = 0;
+    stage_id:ubyte = 0;
 }
 
 
