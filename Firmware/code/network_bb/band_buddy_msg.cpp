@@ -14,7 +14,7 @@ int get_header_size(){
     return ret;
 }
 
-int register_stage(int stage_id, const int &socket_fd){
+int register_stage(const int &socket_fd, int stage_id){
     int ret = FAILED;
     flatbuffers::FlatBufferBuilder builder; 
     Stages this_stage = static_cast<Stages>(stage_id);
