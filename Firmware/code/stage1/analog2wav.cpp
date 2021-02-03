@@ -8,6 +8,11 @@
 #include <condition_variable>
 #include <mutex>
 
+#include "shared_mem.h"
+
+// The key of the shared memory block; should probably be an env variable?
+#define SHARED_MEMORY_BLOCK_KEY "band buddy"
+
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
 
@@ -298,7 +303,7 @@ void uint16_to_uint8_array_BE(uint8_t* array, uint16_t value)
     array[1] = (value >> 8) & 0xFF;
 }
 
-int write_wav_header(FILE* file)
+int write_wav_header_old(FILE* file)
 {
     uint8_t data[4]; 
 
@@ -363,7 +368,7 @@ int write_wav_header(FILE* file)
     return 0;
 }
 
-int write_wav_data(FILE* file)
+int write_wav_data_old(FILE* file)
 {
     int num_bytes_written;
     if ((num_bytes_written = fwrite(buffer, sizeof(uint8_t), num_bytes_read, file)) != num_bytes_read)
@@ -385,14 +390,14 @@ int write_to_wav(const char* path)
         return 1;
     }
 
-    if (write_wav_header(file))
+    if (write_wav_header_old(file))
     {
         fprintf(stderr, "Failed to write WAV header!\n");
         fclose(file);
         return 1;
     }
 
-    if (write_wav_data(file))
+    if (write_wav_data_old(file))
     {
         fprintf(stderr, "Failed to write WAV data!\n");
         fclose(file);
@@ -400,6 +405,120 @@ int write_to_wav(const char* path)
     }
 
     return 0;
+}
+
+int write_wav_header(uint8_t* mem)
+{
+    uint8_t data[4];
+
+    // Must calculate: chunk size, num channels, sample rate, byte rate, block align, bits/sample, subchunk2 size
+    uint32_t chunk_size, sample_rate, byte_rate, subchunk_size;
+    uint16_t num_channels, block_align, bits_per_sample;
+    calculate_header_values(&chunk_size, &num_channels, &sample_rate, &byte_rate,
+        &block_align, &bits_per_sample, &subchunk_size);
+
+    // RIFF bytes
+    memcpy(mem, "RIFF", 4);
+        //memcpy(data, "RIFF", 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Chunk size, big-endian
+    uint32_to_uint8_array_BE(data, chunk_size);
+    memcpy(mem + 4, data, 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // WAVE bytes
+    memcpy(mem + 8, "WAVE", 4);
+        //memcpy(data, "WAVE", 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // fmt  bytes
+    memcpy(mem + 12, "fmt ", 4);
+        //memcpy(data, "fmt ", 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Subchunk1 size is always 16 for WAV
+    data[0] = 16; data[1] = 0x00; data[2] = 0x00; data[3] = 0x00;
+    memcpy(mem + 16, data, 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Audio format is always 1 for PCM
+    data[0] = 0x01; data[1] = 0x00; data[2] = 0x00; data[3] = 0x00;
+    memcpy(mem + 20, data, 4);
+        //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // Channel count, big-endian
+    uint16_to_uint8_array_BE(data, num_channels);
+    memcpy(mem + 22, data, 2);
+        //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // Sample rate, big-endian
+    uint32_to_uint8_array_BE(data, sample_rate);
+    memcpy(mem + 24, data, 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Byte rate, big-endian
+    uint32_to_uint8_array_BE(data, byte_rate);
+    memcpy(mem + 28, data, 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Block align, big-endian
+    uint16_to_uint8_array_BE(data, block_align);
+    memcpy(mem + 32, data, 4);
+        //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // Bits per sample, big-endian
+    uint16_to_uint8_array_BE(data, bits_per_sample);
+    memcpy(mem + 34, data, 2);
+        //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // data bytes 
+    memcpy(mem + 36, data, 4);
+        //memcpy(data, "data", 4);
+        //fwrite(data, sizeof(uint8_t), 4, file); 
+
+    // Subchunk 2 size, big-endian
+    uint32_to_uint8_array_BE(data, subchunk_size);
+    memcpy(mem + 40, data, 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    return 0;
+}
+
+int write_wav_data(uint8_t* mem)
+{
+    // Memcpy into the shared memory; skip the 44-byte header
+    memcpy(mem + 44, buffer, num_bytes_read);
+    return 0;
+}
+
+int write_to_shared_mem(char* path)
+{
+    // Open the shared memory block 
+    uint8_t* shared_mem_blk = (uint8_t*)attach_mem_blk((char*)path, num_bytes_read);
+    if (!shared_mem_blk)
+    {
+        fprintf(stderr, "Failed to open shared memory block!\n");
+        return 1;
+    }
+
+    if (!write_wav_header(shared_mem_blk))
+    {
+        fprintf(stderr, "Failed to write wav header into shared memory block!\n");
+        detach_mem_blk(shared_mem_blk);
+        return 1;
+    }
+
+    if (!write_wav_data(shared_mem_blk))
+    {
+        fprintf(stderr, "Failed to write wav data into shared memory block!\n");
+        detach_mem_blk(shared_mem_blk);
+        return 1;
+    }
+
+    detach_mem_blk(shared_mem_blk);
+    return 0;
+
 }
 
 int main(int argc, char* argv[])
@@ -437,7 +556,7 @@ int main(int argc, char* argv[])
         }
 
         // Write to wav
-        if ((err = write_to_wav("/home/patch/from_pi.wav")))
+        if ((err = write_to_wav(SHARED_MEMORY_BLOCK_KEY)))
         {
             break;
         }  
