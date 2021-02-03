@@ -1,20 +1,23 @@
-CROSS_PREFIX := /pitools/arm-bcm2708/arm-rpi-4.9.3-linux-gnueabihf/bin/arm-linux-gnueabihf-
+#CROSS_PREFIX := /pitools/arm-bcm2708/arm-rpi-4.9.3-linux-gnueabihf/bin/arm-linux-gnueabihf-
 CC           := $(CROSS_PREFIX)g++
 
-OBJS 		 := server.o band_buddy_msg.o 
+OBJS 		 := server.o band_buddy_msg.o test_client.o
 CFLAGS		 := -std=c++14
-TARGET		 :=	ban_buddy_server 
+TARGETS		 :=	ban_buddy_server test_client
 LIB			 := 
-INCLUDE		 := 
+INCLUDE		 :=  
 LIB_PATH	 := 
 
-all: $(TARGET)
+all: $(TARGETS)
 
-$(TARGET): $(OBJS)
+ban_buddy_server: server.o 
 	$(CC) $(CFLAGS)  -o  $@ $^ $(LIB_PATH) $(LIB)
+
+test_client: test_client.o band_buddy_msg.o
+	$(CC) $(CFLAGS)  -o  $@ $^ $(LIB_PATH) $(LIB)	
 
 %.o: %.cpp
 	$(CC) $(CFLAGS) -c  $(INCLUDE) $< 
 
 clean:
-	rm -f $(TARGET) $(OBJS)
+	rm -f $(TARGETS) $(OBJS)

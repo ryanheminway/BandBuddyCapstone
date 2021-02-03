@@ -18,7 +18,7 @@ The skeleton code can be found at https://www.geeksforgeeks.org/socket-programmi
      
 #define TRUE   1  
 #define FALSE  0  
-#define PORT 8888  
+#define PORT   8080 
 #define MAX_CLIENTS 3
      
 int main(int argc , char *argv[])   

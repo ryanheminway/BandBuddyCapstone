@@ -29,7 +29,7 @@ int get_socket_discriptor(){
   
     // assign IP, PORT 
     servaddr.sin_family = AF_INET; 
-    servaddr.sin_addr.s_addr = inet_addr("SERVER_IP"); 
+    servaddr.sin_addr.s_addr = inet_addr(SERVER_IP); 
     servaddr.sin_port = htons(PORT); 
   
     // connect the client socket to server socket 
@@ -105,6 +105,6 @@ int connect_and_register(int &stage_id){
     socket_fd = get_socket_discriptor();
     ret = register_stage(socket_fd, stage_id);
 
-    return ret != FAILED ? SUCCESS : FAILED;
+    return ret != FAILED ? socket_fd : FAILED;
 
 }
