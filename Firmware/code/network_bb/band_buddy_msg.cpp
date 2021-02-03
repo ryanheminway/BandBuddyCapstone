@@ -5,6 +5,7 @@
 #include <stdlib.h> 
 #include <string.h> 
 #include <sys/socket.h> 
+#include <arpa/inet.h>
 #define MAX 80 
 #define PORT 8080 
 #define SERVER_IP "127.0.0.1"
@@ -54,7 +55,30 @@ int get_header_size(){
     return ret;
 }
 
-int register_stage(const int &socket_fd, int stage_id){
+
+int create_and_send_header(int &socket_fd, int &payload_size, int &destination, int &cmd, int &stage_id){
+    int ret = FAILED;
+    flatbuffers::FlatBufferBuilder builder; 
+
+    //static cast all args
+    Stages dest = static_cast<Stages>(destination);
+    Cmds command = static_cast<Cmds>(cmd);
+    Stages this_stage = static_cast<Stages>(stage_id);
+
+    //create header
+    auto header = CreateHeader(builder, payload_size, dest, command, this_stage);
+    builder.Finish(header);
+
+    auto header_ptr = builder.GetBufferPointer();
+    int size = builder.GetSize();
+
+    ret = write(socket_fd, header_ptr, size);
+
+    return ret != FAILED ? SUCCESS : FAILED;
+
+}
+
+int register_stage(const int &socket_fd, int &stage_id){
     int ret = FAILED;
     flatbuffers::FlatBufferBuilder builder; 
     Stages this_stage = static_cast<Stages>(stage_id);
@@ -68,6 +92,18 @@ int register_stage(const int &socket_fd, int stage_id){
 
     //send over network
     ret = write(socket_fd, header_ptr, header_size);
+
+    builder.Clear();
+
+    return ret != FAILED ? SUCCESS : FAILED;
+}
+
+int connect_and_register(int &stage_id){
+    int socket_fd = 0, ret = FAILED;
+
+    //connect to server to get socket descriptor
+    socket_fd = get_socket_discriptor();
+    ret = register_stage(socket_fd, stage_id);
 
     return ret != FAILED ? SUCCESS : FAILED;
 
