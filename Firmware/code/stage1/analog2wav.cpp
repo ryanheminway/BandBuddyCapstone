@@ -11,7 +11,7 @@
 #include "shared_mem.h"
 
 // The key of the shared memory block; should probably be an env variable?
-#define SHARED_MEMORY_BLOCK_KEY "band buddy"
+#define SHARED_MEMORY_BLOCK_KEY ((char*)"/home/patch/BandBuddyCapstone/Firmware/code/common/shared_mem_key")
 
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
@@ -473,7 +473,7 @@ int write_wav_header(uint8_t* mem)
         //fwrite(data, sizeof(uint8_t), 2, file);
 
     // data bytes 
-    memcpy(mem + 36, data, 4);
+    memcpy(mem + 36, "data", 4);
         //memcpy(data, "data", 4);
         //fwrite(data, sizeof(uint8_t), 4, file); 
 
@@ -495,21 +495,21 @@ int write_wav_data(uint8_t* mem)
 int write_to_shared_mem(char* path)
 {
     // Open the shared memory block 
-    uint8_t* shared_mem_blk = (uint8_t*)attach_mem_blk((char*)path, num_bytes_read);
+    uint8_t* shared_mem_blk = (uint8_t*)attach_mem_blk((char*)path, num_bytes_read + 44);
     if (!shared_mem_blk)
     {
         fprintf(stderr, "Failed to open shared memory block!\n");
         return 1;
     }
 
-    if (!write_wav_header(shared_mem_blk))
+    if (write_wav_header(shared_mem_blk))
     {
         fprintf(stderr, "Failed to write wav header into shared memory block!\n");
         detach_mem_blk(shared_mem_blk);
         return 1;
     }
 
-    if (!write_wav_data(shared_mem_blk))
+    if (write_wav_data(shared_mem_blk))
     {
         fprintf(stderr, "Failed to write wav data into shared memory block!\n");
         detach_mem_blk(shared_mem_blk);
@@ -556,12 +556,12 @@ int main(int argc, char* argv[])
         }
 
         // Write to wav
-        if ((err = write_to_wav(SHARED_MEMORY_BLOCK_KEY)))
+        if ((err = write_to_shared_mem(SHARED_MEMORY_BLOCK_KEY)))
         {
             break;
         }  
 
-        // !TEMP 
+        // !TEMP
         break;
     }
 
@@ -570,6 +570,8 @@ int main(int argc, char* argv[])
     {
         close_capture_handle();
     }
-
+    
+    // !TEMP
+    fprintf(stdout, "Num bytes read: %d\n", num_bytes_read);
     return err;
 }
