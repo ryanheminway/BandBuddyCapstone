@@ -5,14 +5,21 @@ OBJS 		 := analog2wav.o
 CFLAGS		 := -Wall -Werror
 TARGET		 := test
 
+OBJS 		 := analog2wav.o ../common/shared_mem.o
+CFLAGS		 := -std=c++11
+TARGET		 := analog2wave
+LIB			 := -lasound
+INCLUDE		 := -I/usr/include/ -I../common
+LIB_PATH	 := -L/usr/lib
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
+	mv shared_mem.o ../common
+	$(CC) $(CFLAGS)  -o  $@ $^ $(LIB_PATH) $(LIB)
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< 
+%.o: %.cpp
+	$(CC) $(CFLAGS) -c  $(INCLUDE) $< 
 
 clean:
 	rm -f $(TARGET) $(OBJS)

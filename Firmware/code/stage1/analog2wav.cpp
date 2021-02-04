@@ -526,7 +526,15 @@ int main(int argc, char* argv[])
     // Register button press signal handler
     signal(SIGINT, button_pressed);
 
+<<<<<<< HEAD
     int err = 0;
+=======
+    //get memory block 
+    char *shared_mem_blk = (char *)attach_mem_blk(FILE_NAME, BLK_SIZE);
+
+    // This will change as the module evolves
+    int err = record_audio();
+>>>>>>> master
 
     while (1)
     {

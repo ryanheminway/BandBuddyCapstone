@@ -48,6 +48,14 @@ Possible solution. Again... havn't really tried it yet. Tried other ones that di
 
 https://pypi.org/project/audio-to-midi/
 
+Found how Magenta does their "audio to midi" translation. They use this Librosa library to extract timing information about notes. They ignore the pitch of each note because they really don't need it for their drum model. See the MagentaDemo notebook for more information.
+
+https://librosa.org/doc/latest/index.html
+
+List of WAV to MIDI resources
+
+https://gist.github.com/natowi/d26c7e97443ec97e8032fb7e7596f0b0
+
 # MIDI resources / packages 
 
 https://pypi.org/project/MIDIFile/
