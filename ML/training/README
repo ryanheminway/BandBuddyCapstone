@@ -1,0 +1,11 @@
+Script should be super easy to run. But first make sure you have install the Magenta tools: https://github.com/magenta/magenta/blob/master/README.md#installation
+
+chmod 777 train.sh
+./train.sh style
+
+style should be all lowercase
+
+Examples:
+./train.sh rock
+./train.sh jazz
+./train.sh funk
