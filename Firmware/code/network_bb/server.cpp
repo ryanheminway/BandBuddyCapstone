@@ -130,12 +130,16 @@ int main(int argc , char *argv[])
             //inform user of socket number - used in send and receive commands  
             printf("New connection , socket fd is %d , ip is : %s , port : %d n", 
                     new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));   
-           
+            //TODO: Recieve register message (Header flatbuffer) 
             //send new connection greeting message  
             if( send(new_socket, message, strlen(message), 0) != strlen(message) )   
             {   
                 perror("send");   
             }   
+
+            //TODO: Deserialize flatbuffer 
+            //TODO: verify flatbuffer
+            //Extarct info that you need
                  
             printf("Welcome message sent successfully");   
                  

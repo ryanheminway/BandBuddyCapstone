@@ -86,7 +86,7 @@ int register_stage(const int &socket_fd, int &stage_id){
     
     auto header = CreateHeader(builder, 0, Stages_Stage1, cmd, this_stage); 
     builder.Finish(header);
-
+    //TODO: use create_and_sendd header function
     auto header_ptr = builder.GetBufferPointer();
     int header_size = builder.GetSize();
 
