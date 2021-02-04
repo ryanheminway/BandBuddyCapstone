@@ -5,8 +5,14 @@
 #include <alsa/asoundlib.h>
 #include <signal.h>
 #include <atomic>
-#include <stdint.h>
+#include <condition_variable>
+#include <mutex>
+
 #include "shared_mem.h"
+
+// The key of the shared memory block; should probably be an env variable?
+#define SHARED_MEMORY_ENV_VAR "BANDBUDDY_SHARED_MEMORY_KEY"
+
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
 
@@ -44,6 +50,12 @@ static const char* alsa_capture_device_name = "plughw:CARD=pisound";
 // Cancel atomic: set high when the button is pressed
 std::atomic_bool is_button_pressed;
 
+// The mutex upon which to lock the condition variable
+std::mutex is_button_pressed_mutex;
+
+// The condition variable upon which to alert a button press
+std::condition_variable is_button_pressed_cv;
+
 // The number of bytes read in total 
 static int num_bytes_read = 0;
 
@@ -52,6 +64,19 @@ void button_pressed(int sig)
 {
     // Which memory order to use here? 
     is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
+    is_button_pressed_cv.notify_one();
+}
+
+void await_button_press()
+{ 
+    // Acquire the mutex and await the condition variable
+    std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
+
+    // Lambda prevents spurious wakeups
+    is_button_pressed_cv.wait(lock, [&](){ return is_button_pressed.load(std::memory_order::memory_order_seq_cst); });
+
+    // Reset the button status to unpressed
+    is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
 }
 
 // Print an error and its snd string message to stderr.
@@ -173,11 +198,10 @@ int prepare_capture_device()
     {
         print_error(err, "Could not prepare the capture device!");
     }
-
     return err;
 }
 
-int start_device_and_record()
+int record_until_button_press()
 {
     int err; 
     if ((err = snd_pcm_start(capture_handle)) < 0)
@@ -201,18 +225,24 @@ int start_device_and_record()
         }
 
         snd_pcm_sframes_t frames_available = snd_pcm_avail_update(capture_handle);
-        if (frames_available != FRAMES_PER_PERIOD)
+        if (frames_available < FRAMES_PER_PERIOD)
         {
-            fprintf(stderr, "Incorrect available frames: expected %d, received %d!\n", FRAMES_PER_PERIOD, frames_available);
+            fprintf(stderr, "Too few frames received: expected %d, received %d!\n", FRAMES_PER_PERIOD, frames_available);
             return 1;
         }
+        
+        // If there were more frames available than expected, report it - if this happens many times in a row, we might get an overrun
+        if (frames_available != FRAMES_PER_PERIOD)
+        {
+            fprintf(stderr, "Expected %d frames, but %d are ready. Monitor for overflow?", FRAMES_PER_PERIOD, frames_available);
+        }
 
-        // Print here etc
-        if ((err = snd_pcm_readi(capture_handle, buffer + num_bytes_read, frames_available)) != frames_available)
+        // Read one period, even if more is available
+        if ((err = snd_pcm_readi(capture_handle, buffer + num_bytes_read, FRAMES_PER_PERIOD)) != FRAMES_PER_PERIOD)
         {
             print_error(err, "Frame read failed!"); return err;
         }
-
+        
         num_bytes_read += BYTES_PER_PERIOD;
     }
 
@@ -221,9 +251,15 @@ int start_device_and_record()
     {
         fprintf(stderr, "%s", "Recording ran out of memory!\n"); return 0;
     } 
+
     #warning *** MEMORY OVERFLOW TEMPORARILY DOES NOT ERROR - FIX THIS POST DEBUG SESSION!!!
 
-    // !TODO flush the capture buffer? 
+    // !TODO flush the capture buffer!!!
+
+    if ((err = snd_pcm_close(capture_handle)) < 0)
+    {
+        print_error(err, "Could not pause the capture device!"); return err;
+    }
 
     return 0;
 }
@@ -231,29 +267,6 @@ int start_device_and_record()
 int close_capture_handle()
 {
     return snd_pcm_close(capture_handle);
-}
-
-int record_audio()
-{
-    // Init the capture handle 
-    if (init_capture_handle())
-    {
-        return 1;
-    }
-
-    // Prepare the capture device
-    if (prepare_capture_device())
-    {
-        return 1;
-    }
-
-    // Start the device and record
-    int err = start_device_and_record();
-
-    // Close the capture device, even on error
-    err |=  close_capture_handle();
-
-    return err; 
 }
 
 void calculate_header_values(uint32_t* chunk_size, uint16_t* num_channels, uint32_t* sample_rate, uint32_t* byte_rate, 
@@ -290,7 +303,7 @@ void uint16_to_uint8_array_BE(uint8_t* array, uint16_t value)
     array[1] = (value >> 8) & 0xFF;
 }
 
-int write_wav_header(FILE* file)
+int write_wav_header_old(FILE* file)
 {
     uint8_t data[4]; 
 
@@ -355,7 +368,7 @@ int write_wav_header(FILE* file)
     return 0;
 }
 
-int write_wav_data(FILE* file)
+int write_wav_data_old(FILE* file)
 {
     int num_bytes_written;
     if ((num_bytes_written = fwrite(buffer, sizeof(uint8_t), num_bytes_read, file)) != num_bytes_read)
@@ -373,20 +386,20 @@ int write_to_wav(const char* path)
     FILE* file = fopen(path, "w");
     if (!file)
     {
-        fprintf(stderr, "Failed to open file %s!", path);
+        fprintf(stderr, "Failed to open file %s!\n", path);
         return 1;
     }
 
-    if (write_wav_header(file))
+    if (write_wav_header_old(file))
     {
-        fprintf(stderr, "Failed to write WAV header!");
+        fprintf(stderr, "Failed to write WAV header!\n");
         fclose(file);
         return 1;
     }
 
-    if (write_wav_data(file))
+    if (write_wav_data_old(file))
     {
-        fprintf(stderr, "Failed to write WAV data!");
+        fprintf(stderr, "Failed to write WAV data!\n");
         fclose(file);
         return 1;
     }
@@ -394,22 +407,172 @@ int write_to_wav(const char* path)
     return 0;
 }
 
+int write_wav_header(uint8_t* mem)
+{
+    uint8_t data[4];
+
+    // Must calculate: chunk size, num channels, sample rate, byte rate, block align, bits/sample, subchunk2 size
+    uint32_t chunk_size, sample_rate, byte_rate, subchunk_size;
+    uint16_t num_channels, block_align, bits_per_sample;
+    calculate_header_values(&chunk_size, &num_channels, &sample_rate, &byte_rate,
+        &block_align, &bits_per_sample, &subchunk_size);
+
+    // RIFF bytes
+    memcpy(mem, "RIFF", 4);
+        //memcpy(data, "RIFF", 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Chunk size, big-endian
+    uint32_to_uint8_array_BE(data, chunk_size);
+    memcpy(mem + 4, data, 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // WAVE bytes
+    memcpy(mem + 8, "WAVE", 4);
+        //memcpy(data, "WAVE", 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // fmt  bytes
+    memcpy(mem + 12, "fmt ", 4);
+        //memcpy(data, "fmt ", 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Subchunk1 size is always 16 for WAV
+    data[0] = 16; data[1] = 0x00; data[2] = 0x00; data[3] = 0x00;
+    memcpy(mem + 16, data, 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Audio format is always 1 for PCM
+    data[0] = 0x01; data[1] = 0x00; data[2] = 0x00; data[3] = 0x00;
+    memcpy(mem + 20, data, 4);
+        //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // Channel count, big-endian
+    uint16_to_uint8_array_BE(data, num_channels);
+    memcpy(mem + 22, data, 2);
+        //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // Sample rate, big-endian
+    uint32_to_uint8_array_BE(data, sample_rate);
+    memcpy(mem + 24, data, 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Byte rate, big-endian
+    uint32_to_uint8_array_BE(data, byte_rate);
+    memcpy(mem + 28, data, 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Block align, big-endian
+    uint16_to_uint8_array_BE(data, block_align);
+    memcpy(mem + 32, data, 4);
+        //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // Bits per sample, big-endian
+    uint16_to_uint8_array_BE(data, bits_per_sample);
+    memcpy(mem + 34, data, 2);
+        //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // data bytes 
+    memcpy(mem + 36, "data", 4);
+        //memcpy(data, "data", 4);
+        //fwrite(data, sizeof(uint8_t), 4, file); 
+
+    // Subchunk 2 size, big-endian
+    uint32_to_uint8_array_BE(data, subchunk_size);
+    memcpy(mem + 40, data, 4);
+        //fwrite(data, sizeof(uint8_t), 4, file);
+
+    return 0;
+}
+
+int write_wav_data(uint8_t* mem)
+{
+    // Memcpy into the shared memory; skip the 44-byte header
+    memcpy(mem + 44, buffer, num_bytes_read);
+    return 0;
+}
+
+int write_to_shared_mem(char* path)
+{
+    // Open the shared memory block 
+    uint8_t* shared_mem_blk = (uint8_t*)attach_mem_blk((char*)path, num_bytes_read + 44);
+    if (!shared_mem_blk)
+    {
+        fprintf(stderr, "Failed to open shared memory block!\n");
+        return 1;
+    }
+
+    if (write_wav_header(shared_mem_blk))
+    {
+        fprintf(stderr, "Failed to write wav header into shared memory block!\n");
+        detach_mem_blk(shared_mem_blk);
+        return 1;
+    }
+
+    if (write_wav_data(shared_mem_blk))
+    {
+        fprintf(stderr, "Failed to write wav data into shared memory block!\n");
+        detach_mem_blk(shared_mem_blk);
+        return 1;
+    }
+
+    detach_mem_blk(shared_mem_blk);
+    return 0;
+
+}
+
 int main(int argc, char* argv[])
 {
     // Register button press signal handler
     signal(SIGINT, button_pressed);
 
-    //get memory block 
-    char *shared_mem_blk = (char *)attach_mem_blk(FILE_NAME, BLK_SIZE);
+    int err = 0;
 
-    // This will change as the module evolves
-    int err = record_audio();
-
-    // If recording failed, don't write the WAV file
-    if (err)
+    while (1)
     {
-        return 1;
+        // Reset the button press status 
+        is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
+
+        // Init the capture handle 
+        err = init_capture_handle();
+        if (err) 
+        {
+            return err;
+        }
+
+        // Prepare the capture handle
+        if ((err = prepare_capture_device()))
+        {
+            return err;
+        }
+
+        // Await a button press
+        await_button_press();
+
+        // Record 
+        if ((err = record_until_button_press()))
+        {
+            break;
+        }
+
+        // Write to wav
+        char* shared_memory_key = getenv(SHARED_MEMORY_ENV_VAR); fprintf(stdout, "%s\n", shared_memory_key);
+        if ((err = write_to_shared_mem(shared_memory_key)))
+        {
+            break;
+        }  
+
+        // !TEMP
+        break;
     }
 
-    return write_to_wav("/home/patch/from_pi.wav");  
+    // Cleanup
+    if (err)
+    {
+        close_capture_handle();
+    }
+    
+    // !TEMP
+    fprintf(stdout, "Num bytes read: %d\n", num_bytes_read);
+    return err;
 }
