@@ -11,7 +11,7 @@
 #include "shared_mem.h"
 
 // The key of the shared memory block; should probably be an env variable?
-#define SHARED_MEMORY_BLOCK_KEY ((char*)"/home/patch/BandBuddyCapstone/Firmware/code/common/shared_mem_key")
+#define SHARED_MEMORY_ENV_VAR "BANDBUDDY_SHARED_MEMORY_KEY"
 
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
@@ -526,15 +526,7 @@ int main(int argc, char* argv[])
     // Register button press signal handler
     signal(SIGINT, button_pressed);
 
-<<<<<<< HEAD
     int err = 0;
-=======
-    //get memory block 
-    char *shared_mem_blk = (char *)attach_mem_blk(FILE_NAME, BLK_SIZE);
-
-    // This will change as the module evolves
-    int err = record_audio();
->>>>>>> master
 
     while (1)
     {
@@ -564,7 +556,8 @@ int main(int argc, char* argv[])
         }
 
         // Write to wav
-        if ((err = write_to_shared_mem(SHARED_MEMORY_BLOCK_KEY)))
+        char* shared_memory_key = getenv(SHARED_MEMORY_ENV_VAR); fprintf(stdout, "%s\n", shared_memory_key);
+        if ((err = write_to_shared_mem(shared_memory_key)))
         {
             break;
         }  
