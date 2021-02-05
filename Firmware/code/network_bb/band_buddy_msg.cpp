@@ -72,6 +72,7 @@ int create_and_send_header(int &socket_fd, int &payload_size, int &destination, 
     auto header_ptr = builder.GetBufferPointer();
     int size = builder.GetSize();
 
+    // ret = write(socket_fd, &size, sizeof(size));
     ret = write(socket_fd, header_ptr, size);
 
     return ret != FAILED ? SUCCESS : FAILED;
@@ -90,7 +91,8 @@ int register_stage(const int &socket_fd, int &stage_id){
     auto header_ptr = builder.GetBufferPointer();
     int header_size = builder.GetSize();
 
-    //send over network
+    //send size along with payload over network
+    // ret = write(socket_fd, &header_size, sizeof(int));
     ret = write(socket_fd, header_ptr, header_size);
 
     builder.Clear();

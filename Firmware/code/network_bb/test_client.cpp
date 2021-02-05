@@ -4,7 +4,7 @@
 
 int main(void){
     int socket_fd;
-    int stage1 = STAGE1;
+    int stage1 = STAGE2;
     socket_fd = connect_and_register(stage1);
 
     if(socket_fd == FAILED){

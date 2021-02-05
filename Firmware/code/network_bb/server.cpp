@@ -5,6 +5,8 @@ The skeleton code can be found at https://www.geeksforgeeks.org/socket-programmi
 */
 
 
+#include "band_buddy_server.h"
+#include <iostream>
 #include <stdio.h>  
 #include <string.h>   //strlen  
 #include <stdlib.h>  
@@ -20,6 +22,7 @@ The skeleton code can be found at https://www.geeksforgeeks.org/socket-programmi
 #define FALSE  0  
 #define PORT   8080 
 #define MAX_CLIENTS 3
+#define MAX_BUFFER_SIZE 4096
      
 int main(int argc , char *argv[])   
 {   
@@ -29,7 +32,7 @@ int main(int argc , char *argv[])
     int max_sd;   
     struct sockaddr_in address;   
          
-    char buffer[1025];  //data buffer of 1K  
+    char buffer[MAX_BUFFER_SIZE];  //data buffer of 1K  
          
     //set of socket descriptors  
     fd_set readfds;   
@@ -128,20 +131,21 @@ int main(int argc , char *argv[])
             }   
              
             //inform user of socket number - used in send and receive commands  
-            printf("New connection , socket fd is %d , ip is : %s , port : %d n", 
+            printf("New connection received from socket: %d (%s:%d)\n", 
                     new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));   
             //TODO: Recieve register message (Header flatbuffer) 
             //send new connection greeting message  
-            if( send(new_socket, message, strlen(message), 0) != strlen(message) )   
-            {   
-                perror("send");   
-            }   
+            if(retrieve_header(buffer, new_socket) < 0) {
+                std::cout << "Error in retrieving header" << std::endl;
+                exit(1);
+            }
+
+            int destination, cmd, stage_id;
 
             //TODO: Deserialize flatbuffer 
             //TODO: verify flatbuffer
             //Extarct info that you need
-                 
-            printf("Welcome message sent successfully");   
+            parse_header(buffer, destination, cmd, stage_id);
                  
             //add new socket to array of sockets  
             //TODO: listen to incoming flatbuffer. This is a register message that contains information about which stage just connected 
@@ -149,23 +153,10 @@ int main(int argc , char *argv[])
                 stage1 should be mapped to client_socket[1]
                 stage2 should be mapped to client_socket[2]
             */
-            for (i = 0; i < MAX_CLIENTS; i++)   
-            {   
-                //if position is empty  i == stage_id from flatbuffer
-
-                /*
-                    i == stage_id
-                    client_socket[stage_id] = new_socket;
-
-                */
-                if( client_socket[i] == 0 )   
-                {   
-                    client_socket[i] = new_socket;   
-                    printf("Adding to list of sockets as %d\n" , i);   
-                         
-                    break;   
-                }   
-            }  
+           if(register_client(client_socket, stage_id, new_socket) < 0) {
+               std::cout << "Error registering client socket" << std::endl;
+               exit(1);
+           }
         }   
              
         //else its some IO operation on some other socket 
