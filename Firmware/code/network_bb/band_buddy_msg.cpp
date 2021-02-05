@@ -46,7 +46,12 @@ int get_socket_discriptor(){
 int get_header_size(){
     int ret = FAILED;
     flatbuffers::FlatBufferBuilder builder;
-    auto header = CreateHeader(builder);
+    int stage_id = 2;
+    Stages this_stage = static_cast<Stages>(stage_id);
+    Cmds cmd = Cmds_Register;
+    
+    auto header = CreateHeader(builder, 0, Stages_Stage3, cmd, this_stage); 
+    // auto header = CreateHeader(builder);
     builder.Finish(header);
 
     ret = builder.GetSize();
@@ -90,6 +95,10 @@ int register_stage(const int &socket_fd, int &stage_id){
     //TODO: use create_and_sendd header function
     auto header_ptr = builder.GetBufferPointer();
     int header_size = builder.GetSize();
+
+    int size = get_header_size();
+
+    printf("builder size vs get_header_size: %d, %d\n", header_size, size);
 
     //send size along with payload over network
     // ret = write(socket_fd, &header_size, sizeof(int));

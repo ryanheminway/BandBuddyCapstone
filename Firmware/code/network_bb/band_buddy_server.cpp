@@ -16,6 +16,7 @@ using namespace Server::Header;
 int retrieve_header(char *buffer, int sockfd) {
     int ret = -1;
     int header_size = get_header_size();
+    // int header_size = -1;
     // ret = read(sockfd, &header_size, sizeof(header_size));
     // #ifdef DEBUG
     std::cout << "Header size: " << header_size << std::endl;
@@ -36,6 +37,7 @@ int retrieve_header(char *buffer, int sockfd) {
 
 int parse_header(char *buffer, int &destination, int &cmd, int &stage_id) {
     auto header = GetHeader(buffer);
+    // bool check = VerifyHeaderBuffer();
     destination = static_cast<int>(header->destination());
     cmd = static_cast<int>(header->cmd());
     stage_id = static_cast<int>(header->stage_id());

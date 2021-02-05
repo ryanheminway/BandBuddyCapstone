@@ -22,7 +22,7 @@ The skeleton code can be found at https://www.geeksforgeeks.org/socket-programmi
 #define FALSE  0  
 #define PORT   8080 
 #define MAX_CLIENTS 3
-#define MAX_BUFFER_SIZE 4096
+#define MAX_BUFFER_SIZE 20
      
 int main(int argc , char *argv[])   
 {   
@@ -133,7 +133,7 @@ int main(int argc , char *argv[])
             //inform user of socket number - used in send and receive commands  
             printf("New connection received from socket: %d (%s:%d)\n", 
                     new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));   
-            //TODO: Recieve register message (Header flatbuffer) 
+            //TODO: Receive register message (Header flatbuffer) 
             //send new connection greeting message  
             if(retrieve_header(buffer, new_socket) < 0) {
                 std::cout << "Error in retrieving header" << std::endl;
