@@ -10,7 +10,7 @@
 
 #include "shared_mem.h"
 
-// The key of the shared memory block; should probably be an env variable?
+// The name of the env var containing the key of the shared memory block
 #define SHARED_MEMORY_ENV_VAR "BANDBUDDY_SHARED_MEMORY_KEY"
 
 // Sample rate: use 48k for now

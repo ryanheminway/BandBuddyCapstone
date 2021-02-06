@@ -35,7 +35,7 @@ int main(int argc, char** argv)
     }
 
     // Memcpy to a file 
-    FILE* file = fopen("/home/patch/BandBuddyCapstone/Firmware/code/stage1/zzz.wav", "w");
+    FILE* file = fopen("zzz.wav", "w");
     if (!file) 
     {
         fprintf(stderr, "Could not open wav file!\n"); return 1;
