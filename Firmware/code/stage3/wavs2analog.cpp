@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <alsa/asoundlib.h>
+#include <thread>
+#include <chrono>
 
 #include "shared_mem.h"
 
@@ -151,15 +153,9 @@ static int init_capture_handle()
         print_error(err, "Could not set the period size!\n"); return err;
     }
     if (num_frames != FRAMES_PER_PERIOD) {
-        fprintf(stderr, "Could not set frames/period: target %d, returned %d!\n", FRAMES_PER_PERIOD, num_frames); 
+        fprintf(stderr, "Could not set frames/period: target %d, returned %lu!\n", FRAMES_PER_PERIOD, num_frames); 
         return 1;
     }
-
-    // // Set the pcm ring buffer size
-    // if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, 2)) < 0)
-    // {
-    //     print_error(err, "Cannot set pcm ring buffer size!"); return err;
-    // }
 
     // Deliver the hardware params to the handle
     if ((err = snd_pcm_hw_params(playback_handle, hw_params)) < 0)
@@ -249,6 +245,8 @@ static int play_loop(int loop_size_bytes)
 
 int close_playback_handle()
 {
+    // Flush the playback handle - this is a BUSY wait! Do better! 
+    while (snd_pcm_drain(playback_handle) == -EAGAIN);
     return snd_pcm_close(playback_handle);
 }
 
@@ -273,13 +271,14 @@ static int loop_audio_until_cancelled(int loop_size)
         }
     }
 
-    return close_playback_handle();
+    return err | close_playback_handle();
 }
 
 int delete_shared_memory(char* mem_block_addr, void* mem)
 {
     bool err = detach_mem_blk(mem);
-    err &= destroy_mem_blk(mem_block_addr);
+    #warning *** TEMPORARILY NOT DESTROYING MEMBLK AFTER PLAYTHROUGH! ***
+    // err &= destroy_mem_blk(mem_block_addr);
     return err;
 }
 
@@ -319,7 +318,11 @@ int main(int argc, char** argv)
         }
 
         // Loop the audio until told not to (!TODO ???)
-        loop_audio_until_cancelled(wav_size);
+        int err;
+        if ((err = loop_audio_until_cancelled(wav_size)))
+        {
+            fprintf(stderr, "loop audio returned %d!\n", err);
+        }
 
         // Close and delete the shared memory - we're done with the old data
         delete_shared_memory(mem_addr, mem);
