@@ -18,6 +18,7 @@
 #define STAGE3_DATA_READY   (3)
 #define STAGE1_DATA         (4)
 
+#pragma pack(push, 1)
 struct wave_header
 {
   uint32_t ChunkID, ChunkSize, Format, Subchunk1ID, Subchunk1Size;
@@ -26,6 +27,7 @@ struct wave_header
   uint16_t BlockAlign, BitsPerSample;
   uint32_t Subchunk2ID, Subchunk2Size;
 };
+#pragma pack(pop)
 
 #define WAVE_HEADER_SIZE sizeof(struct wave_header)
 
