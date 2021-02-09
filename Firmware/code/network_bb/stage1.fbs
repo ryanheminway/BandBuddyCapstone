@@ -1,0 +1,8 @@
+namespace Server.Stage1;
+
+table Stage1{
+    ready:ubyte = 0;
+    wave_data_sz: uint32 = 0;
+}
+
+root_type Stage1;

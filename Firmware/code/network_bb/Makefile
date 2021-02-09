@@ -1,8 +1,8 @@
 #CROSS_PREFIX := /pitools/arm-bcm2708/arm-rpi-4.9.3-linux-gnueabihf/bin/arm-linux-gnueabihf-
-CC           := $(CROSS_PREFIX)g++ -DDebug -ggdb3
+CC           := $(CROSS_PREFIX)g++ 
 
 OBJS 		 := server.o band_buddy_msg.o band_buddy_server.o test_client.o
-CFLAGS		 := -std=c++14
+CFLAGS		 := -std=c++14 -DDebug -ggdb3
 TARGETS		 :=	ban_buddy_server test_client
 LIB			 := 
 INCLUDE		 :=  
