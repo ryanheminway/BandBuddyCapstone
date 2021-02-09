@@ -8,6 +8,7 @@
 #include <string.h> 
 #include <sys/socket.h> 
 #include <arpa/inet.h>
+
 #define MAX 80 
 #define PORT 8080 
 #define SERVER_IP "127.0.0.1"

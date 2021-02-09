@@ -27,6 +27,8 @@ struct wave_header
   uint32_t Subchunk2ID, Subchunk2Size;
 };
 
+#define WAVE_HEADER_SIZE sizeof(struct wave_header)
+
 
 int get_header_size();
 int connect_and_register(int &stage_id, int &socket_fd);
