@@ -88,7 +88,27 @@ static int synchronize_wavs(uint8_t* shared_mem, int shared_mem_size)
         return 1;
     }
 
-    memcpy(sync_buffer, shared_mem, shared_mem_size);
+    memcpy(sync_buffer, shared_mem, shared_mem_size); 
+
+    // For now, open the test file 
+    FILE* test_drums = fopen("/home/patch/BandBuddyCapstone/Firmware/code/stage3/mock/hcb_drums.wav", "r");
+    uint8_t buffer[shared_mem_size];
+    fread(buffer, sizeof(uint8_t), shared_mem_size, test_drums);
+
+    for (int i = 44; i < shared_mem_size; i += 2)
+    {
+        int16_t shared_mem_word_int = shared_mem[i] | (shared_mem[i + 1] << 8);
+        double shared_mem_word = (double)shared_mem_word_int;
+        int16_t file_word_int = buffer[i] | (buffer[i + 1] << 8);
+        double file_word = (double)file_word_int;
+
+        double avg_float = (shared_mem_word + file_word) / 2.0;
+        int16_t avg = (int16_t)avg_float;
+
+        sync_buffer[i - 44] = avg & 0xFF;
+        sync_buffer[i + 1 - 44] = (avg >> 8) & 0xFF; 
+    }
+
     return 0;
 }
 
