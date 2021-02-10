@@ -556,7 +556,7 @@ int main(int argc, char* argv[])
         }
 
         // Write to wav
-        char* shared_memory_key = getenv(SHARED_MEMORY_ENV_VAR); fprintf(stdout, "%s\n", shared_memory_key);
+        char* shared_memory_key = getenv(SHARED_MEMORY_ENV_VAR);
         if ((err = write_to_shared_mem(shared_memory_key)))
         {
             break;

@@ -2,8 +2,9 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <alsa/asoundlib.h>
-#include <thread>
-#include <chrono>
+#include <atomic>
+#include <condition_variable>
+#include <signal.h>
 
 #include "shared_mem.h"
 
@@ -42,6 +43,19 @@ static snd_pcm_t* playback_handle;
 // The ALSA capture device name to use
 static const char* alsa_capture_device_name = "plughw:CARD=pisound";
 
+
+// Cancel atomic: set high when the button is pressed
+std::atomic_bool is_button_pressed;
+
+// The mutex upon which to lock the condition variable
+std::mutex is_button_pressed_mutex;
+
+// Button press handler
+void button_pressed(int sig)
+{
+    // Which memory order to use here? 
+    is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
+}
 
 // Print an error and its snd string message to stderr.
 void print_error(int err, const char* message, ...)
@@ -221,9 +235,16 @@ static int play_loop(int loop_size_bytes)
 
     while (sample_index < loop_size_bytes)
     {
+        // If the button has been pressed, time to stop 
+        if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
+        {
+            fprintf(stdout, "%s\n", "yea");
+            return 1;
+        }
+
         if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
         {
-            print_error(err, "Poll failed!\n");
+            print_error(err, "Poll failed!\n"); return err;
         }
 
         int frames_to_deliver; 
@@ -254,7 +275,7 @@ static int play_loop(int loop_size_bytes)
             {
                 fprintf(stderr, "writei (wrote %d): expected to write %d frames, actually wrote %d!\n", 
                    sample_index, FRAMES_PER_PERIOD, frames_written);
-                return 1;
+                return -frames_written;
             }
         }
         sample_index += BYTES_PER_FRAME * frames_written;
@@ -266,7 +287,7 @@ static int play_loop(int loop_size_bytes)
 int close_playback_handle()
 {
     // Flush the playback handle - this is a BUSY wait! Do better! 
-    while (snd_pcm_drain(playback_handle) == -EAGAIN);
+    //while (snd_pcm_drain(playback_handle) == -EAGAIN);
     return snd_pcm_close(playback_handle);
 }
 
@@ -280,16 +301,11 @@ static int loop_audio_until_cancelled(int loop_size)
         return 1;
     }
 
-    // Loop until what? 
-    int loops = 0;
-#warning *** PLAYBACK LOOP REPEATS ONLY 3 TIMES - NEED TO INTEGRATE W/ BUTTON! ***
-    while (loops++ < 3)
-    {
-        if ((err = play_loop(loop_size)))
-        {
-            break;
-        }
-    }
+    // Loop until the button is pressed
+    while ((err = play_loop(loop_size)) == 0);
+
+    // Clear the successful exit value from the error code - error handling needs to be done much better throughout Stages 1 and 3
+    if (err == 1) err = 0;
 
     return err | close_playback_handle();
 }
@@ -304,9 +320,15 @@ int delete_shared_memory(char* mem_block_addr, void* mem)
 
 int main(int argc, char** argv)
 {
+    // Register button press signal handler
+    signal(SIGINT, button_pressed);
+
     // This will change as it is integrated with the network backbone
     while (1)
     {
+        // Reset the button press status
+        is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
+
         // Await instruction from the network backbone
         int wav_size;
         if (!(wav_size = await_message_from_backbone()))
@@ -347,6 +369,13 @@ int main(int argc, char** argv)
         // Close and delete the shared memory - we're done with the old data
         delete_shared_memory(mem_addr, mem);
 
-        return 0;
+        if (err) 
+        {
+            break;
+        }
+
+        break;
     }
+
+    return 0;
 }
