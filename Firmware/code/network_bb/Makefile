@@ -5,7 +5,7 @@ OBJS 		 := server.o band_buddy_msg.o band_buddy_server.o test_client.o
 CFLAGS		 := -std=c++14 -DDebug -ggdb3
 TARGETS		 :=	ban_buddy_server test_client
 LIB			 := 
-INCLUDE		 := -Iflatbuffer_messages/ 
+INCLUDE		 := -Iflatbuffer_messages/ -I../common
 LIB_PATH	 := 
 
 all: $(TARGETS)

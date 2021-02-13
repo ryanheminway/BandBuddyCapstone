@@ -2,6 +2,7 @@
 #include "header_generated.h"
 #include "stage1_generated.h"
 #include "wave_file_generated.h"
+#include "shared_mem.h"
 #include <netdb.h> 
 #include <stdio.h> 
 #include <stdlib.h> 
@@ -176,6 +177,37 @@ int send_wav_file(int &socket_fd, struct wave_header &wav_hdr, int8_t *raw_data,
     ret = send_payload(socket_fd, wave_file_msg_ptr, payload_size);
     
     return ret;
+}
 
+int send_wav_shared_mem(int &socket_fd, int &size){
+    int ret = FAILED;
+    int cmd = STAGE1_DATA;
+    int destination = STAGE2;
+    int payload_size;
+    int stage_id = STAGE1;
+    char *shared_mem_blk = NULL;
+    flatbuffers::FlatBufferBuilder builder;
 
+    payload_size = size; 
+
+    ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+    if(ret == FAILED){
+        printf("Error while sending header\n");
+        return ret;
+    } 
+
+    //get shared_mem buffer  
+    shared_mem_blk = (char *)attach_mem_blk(FILE_NAME, size);
+
+    if(shared_mem_blk == NULL){
+        printf("Could not get memory block\n");
+        return FAILED;
+    }
+   ret = send_payload(socket_fd, shared_mem_blk, size);
+
+   //detach 
+   detach_mem_blk(shared_mem_blk);
+
+   return ret;
+   
 }
