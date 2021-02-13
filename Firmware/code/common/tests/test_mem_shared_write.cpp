@@ -8,7 +8,8 @@ int main(void){
 
     if (mem_blk == NULL)
     {
-       printf("Could not get memory block\n");
+        printf("Could not get memory block\n");
+        return 1;
     }
 
     printf("Writing data to shared memory\n");
