@@ -111,7 +111,7 @@ int connect_and_register(int &stage_id, int &socket_fd){
 
 }
 
-static int send_payload(int &socket_fd, const unsigned char *data, int size){
+static int send_payload(int &socket_fd, unsigned char *data, int size){
     int ret = FAILED;    
     ret = write(socket_fd, data, size);
 
@@ -185,7 +185,7 @@ int send_wav_shared_mem(int &socket_fd, int &size){
     int destination = STAGE2;
     int payload_size;
     int stage_id = STAGE1;
-    char *shared_mem_blk = NULL;
+    unsigned char *shared_mem_blk = NULL;
     flatbuffers::FlatBufferBuilder builder;
 
     payload_size = size; 
@@ -197,7 +197,7 @@ int send_wav_shared_mem(int &socket_fd, int &size){
     } 
 
     //get shared_mem buffer  
-    shared_mem_blk = (char *)attach_mem_blk(FILE_NAME, size);
+    shared_mem_blk = (unsigned char *)attach_mem_blk(FILE_NAME, size);
 
     if(shared_mem_blk == NULL){
         printf("Could not get memory block\n");
