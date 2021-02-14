@@ -7,7 +7,12 @@ wg: client
 - wave data flatbuffer 
     - function that takes in all data required to represent .wavfile 
         - wave file header + raw data
-
+- stage1 ready message 
+    - ready field 
+    - size field 
+    
+- flatbuffer table for the wave header
+    - 2 or 4 bytes so we need to serialize endianness 
 rb: server
  - read the flatbuffer header and extract relevant info.
     -size ----> when the message ends
@@ -21,3 +26,4 @@ rb: server
 
 - if there is a way to get rid off the looping 
 - Go over TODOs in code to check that everything is there
+- first 44 bytes are wave header 
