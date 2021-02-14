@@ -168,6 +168,17 @@ int main(int argc , char *argv[])
             {   
                 //Check if it was for closing , and also read the  
                 //incoming message  
+                /*
+
+
+                    get header  --> return header or the info that you need 
+                    switch(cmd):
+                    stage1_data_ready:
+                    send_wav_shared_mem(socket_fd, size);
+                    ...
+
+
+                */
                 //TODO: Needs to be replaced with handler to retrieve flatbuffer 
                 //TODO: Read header. Read all of the remaining data. serialize flatbuffer  
                 if ((valread = read( sd , buffer, 1024)) == 0)   
