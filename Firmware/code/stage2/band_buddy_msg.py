@@ -8,16 +8,11 @@ import Server.Header.Stages as stages
 
 FAILED = -1
 SUCCESS = 1
-#socket descriptor that can be used by the client to send/recieve info
-socket_fd = FAILED
 
 def get_socket_descriptor(host, port):
-    if socket_fd == -1 :
-        socket_fd = socket.socket()
-        socket_fd.connect((host, port))
-        return socket_fd
-    else:
-        return socket_fd
+    socket_fd = socket.socket()
+    socket_fd.connect((host, port))
+    return socket_fd
 
 def create_header(payload_size, destination, cmd, stage_id):
     builder = flatbuffers.Builder(0)
@@ -83,3 +78,6 @@ def get_payload(sock_fd, size):
 if __name__ == "__main__":
     header_len = get_header_size() 
     print(header_len)
+    host = "127.0.0.1"
+    port = 8080
+    socket_fd = connect_and_register(host, port)
