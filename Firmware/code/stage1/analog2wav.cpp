@@ -10,7 +10,7 @@
 
 #include "shared_mem.h"
 
-// The key of the shared memory block; should probably be an env variable?
+// The name of the env var containing the key of the shared memory block
 #define SHARED_MEMORY_ENV_VAR "BANDBUDDY_SHARED_MEMORY_KEY"
 
 // Sample rate: use 48k for now
@@ -227,14 +227,14 @@ int record_until_button_press()
         snd_pcm_sframes_t frames_available = snd_pcm_avail_update(capture_handle);
         if (frames_available < FRAMES_PER_PERIOD)
         {
-            fprintf(stderr, "Too few frames received: expected %d, received %d!\n", FRAMES_PER_PERIOD, frames_available);
+            fprintf(stderr, "Too few frames received: expected %d, received %lu!\n", FRAMES_PER_PERIOD, frames_available);
             return 1;
         }
         
         // If there were more frames available than expected, report it - if this happens many times in a row, we might get an overrun
         if (frames_available != FRAMES_PER_PERIOD)
         {
-            fprintf(stderr, "Expected %d frames, but %d are ready. Monitor for overflow?", FRAMES_PER_PERIOD, frames_available);
+            fprintf(stderr, "Expected %d frames, but %lu are ready. Monitor for overflow?", FRAMES_PER_PERIOD, frames_available);
         }
 
         // Read one period, even if more is available
@@ -556,7 +556,7 @@ int main(int argc, char* argv[])
         }
 
         // Write to wav
-        char* shared_memory_key = getenv(SHARED_MEMORY_ENV_VAR); fprintf(stdout, "%s\n", shared_memory_key);
+        char* shared_memory_key = getenv(SHARED_MEMORY_ENV_VAR);
         if ((err = write_to_shared_mem(shared_memory_key)))
         {
             break;

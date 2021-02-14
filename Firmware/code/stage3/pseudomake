@@ -1,0 +1,2 @@
+# i absolutely despise makefiles
+g++ -g -I ../common -o wavs2analog wavs2analog.cpp ../common/shared_mem.cpp -lasound
