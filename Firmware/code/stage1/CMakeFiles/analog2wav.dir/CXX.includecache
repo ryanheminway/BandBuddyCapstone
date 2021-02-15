@@ -1,0 +1,34 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/rubens/coral/BandBuddyCapstone/Firmware/code/stage1/analog2wav.cpp
+stdio.h
+-
+stdlib.h
+-
+errno.h
+-
+poll.h
+-
+alsa/asoundlib.h
+-
+signal.h
+-
+atomic
+-
+condition_variable
+-
+mutex
+-
+shared_mem.h
+/home/rubens/coral/BandBuddyCapstone/Firmware/code/stage1/shared_mem.h
+
+common/lib/shared_mem.h
+stdbool.h
+-
+

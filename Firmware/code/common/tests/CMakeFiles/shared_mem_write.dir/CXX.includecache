@@ -1,0 +1,20 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/rubens/coral/BandBuddyCapstone/Firmware/code/common/tests/test_mem_shared_write.cpp
+shared_mem.h
+/home/rubens/coral/BandBuddyCapstone/Firmware/code/common/tests/shared_mem.h
+stdio.h
+-
+string.h
+-
+
+common/lib/shared_mem.h
+stdbool.h
+-
+

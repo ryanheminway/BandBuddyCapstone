@@ -16,15 +16,11 @@ using namespace Server::Header;
 int retrieve_header(char *buffer, int sockfd) {
     int ret = -1;
     int header_size = get_header_size();
-    // int header_size = -1;
-    // ret = read(sockfd, &header_size, sizeof(header_size));
-    // #ifdef DEBUG
+
+#ifdef DEBUG
     std::cout << "Header size: " << header_size << std::endl;
-    // #endif
-    // if(ret < 0) {
-    //     std::cout << "Error in receiving header size" << std::endl;
-    //     return ret;
-    // }
+#endif
+
     ret = read(sockfd, buffer, header_size);
     #ifdef DEBUG
     std::cout << "Msg: " << buffer << std::endl;
@@ -35,15 +31,18 @@ int retrieve_header(char *buffer, int sockfd) {
     return ret;
 }
 
-int parse_header(char *buffer, int &destination, int &cmd, int &stage_id) {
+int parse_header(char *buffer, int &destination, int &cmd, int &stage_id, int &size) {
     auto header = GetHeader(buffer);
     // bool check = VerifyHeaderBuffer();
     destination = static_cast<int>(header->destination());
     cmd = static_cast<int>(header->cmd());
     stage_id = static_cast<int>(header->stage_id());
-    std::cout << stage_id << std::endl;
-    std::cout << destination << std::endl;
-    std::cout << cmd << std::endl;
+    size = static_cast<int>(header->size());
+
+    std::cout << "stage id" << stage_id << std::endl;
+    std::cout << "dest: " << destination << std::endl;
+    std::cout << "cmd: " << cmd << std::endl;
+    std::cout << "size: " << size << std::endl;
     return 0;
 }
 

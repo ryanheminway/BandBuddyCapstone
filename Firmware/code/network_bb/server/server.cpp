@@ -6,6 +6,7 @@ The skeleton code can be found at https://www.geeksforgeeks.org/socket-programmi
 
 
 #include "band_buddy_server.h"
+#include "band_buddy_msg.h"
 #include <iostream>
 #include <stdio.h>  
 #include <string.h>   //strlen  
@@ -22,15 +23,16 @@ The skeleton code can be found at https://www.geeksforgeeks.org/socket-programmi
 #define FALSE  0  
 #define PORT   8080 
 #define MAX_CLIENTS 3
-#define MAX_BUFFER_SIZE 20
+#define MAX_BUFFER_SIZE 1024
      
 int main(int argc , char *argv[])   
 {   
     int opt = TRUE;   
     int master_socket , addrlen , new_socket , client_socket[MAX_CLIENTS],  
         activity, i , valread , sd;   
-    int max_sd;   
-    struct sockaddr_in address;   
+    int max_sd;
+    int destination, cmd, stage_id, size;
+    struct sockaddr_in address;
          
     char buffer[MAX_BUFFER_SIZE];  //data buffer of 1K  
          
@@ -132,27 +134,18 @@ int main(int argc , char *argv[])
              
             //inform user of socket number - used in send and receive commands  
             printf("New connection received from socket: %d (%s:%d)\n", 
-                    new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));   
-            //TODO: Receive register message (Header flatbuffer) 
-            //send new connection greeting message  
+                    new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+
+            // Receive register message (Header flatbuffer)
             if(retrieve_header(buffer, new_socket) < 0) {
                 std::cout << "Error in retrieving header" << std::endl;
                 exit(1);
             }
 
-            int destination, cmd, stage_id;
-
-            //TODO: Deserialize flatbuffer 
-            //TODO: verify flatbuffer
-            //Extarct info that you need
-            parse_header(buffer, destination, cmd, stage_id);
+            // Extract information from flatbuffer
+            parse_header(buffer, destination, cmd, stage_id, size);
                  
-            //add new socket to array of sockets  
-            //TODO: listen to incoming flatbuffer. This is a register message that contains information about which stage just connected 
-            /*
-                stage1 should be mapped to client_socket[1]
-                stage2 should be mapped to client_socket[2]
-            */
+            // Register client by saving its sockfd based on stage_id
            if(register_client(client_socket, stage_id, new_socket) < 0) {
                std::cout << "Error registering client socket" << std::endl;
                exit(1);
@@ -169,23 +162,17 @@ int main(int argc , char *argv[])
                 //Check if it was for closing , and also read the  
                 //incoming message  
                 /*
-
-
-                    get header  --> return header or the info that you need 
+                    get header  --> return header or the info that you need
                     switch(cmd):
                     stage1_data_ready:
                     send_wav_shared_mem(socket_fd, size);
                     ...
-
-
                 */
-                //TODO: Needs to be replaced with handler to retrieve flatbuffer 
-                //TODO: Read header. Read all of the remaining data. serialize flatbuffer  
-                if ((valread = read( sd , buffer, 1024)) == 0)   
+
+                if (retrieve_header(buffer, sd) == 0)
                 {   
                     //Somebody disconnected , get his details and print  
-                    getpeername(sd , (struct sockaddr*)&address , \ 
-                        (socklen_t*)&addrlen);   
+                    getpeername(sd , (struct sockaddr*)&address , (socklen_t*)&addrlen);
                     printf("Host disconnected , ip %s , port %d \n" ,  
                           inet_ntoa(address.sin_addr) , ntohs(address.sin_port));   
                          
@@ -194,17 +181,30 @@ int main(int argc , char *argv[])
                     client_socket[i] = 0;   
                 }   
                      
-                //Echo back the message that came in  
+                // Parse header for header size
+                // Run appropriate functions based on cmd in header
                 else 
-                {   
-                    //set the string terminating NULL byte on the end  
-                    //of the data read  
-                    buffer[valread] = '\0';   
-                    send(sd , buffer , strlen(buffer) , 0 );   
-                }   
+                {
+                    parse_header(buffer, destination, cmd, stage_id, size);
+
+                    switch(cmd) {
+                        case STAGE1_DATA_READY:
+                            std::cout << "Processing stage 1 data ready" << std::endl;
+                            send_wav_shared_mem(client_socket[destination], size);
+                            break;
+                        case STAGE2_DATA_READY:
+                            // TODO: stage2_data_ready function
+                            std::cout << "Processing stage 2 data ready" << std::endl;
+                            break;
+                        case STAGE3_DATA_READY:
+                            // TODO: stage3_data_ready function
+                            std::cout << "Processing stage 2 data ready" << std::endl;
+                            break;
+                    }
+                }
             }   
         }   
     }   
          
     return 0;   
-}   
+}
