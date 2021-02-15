@@ -1,3 +1,8 @@
 loopback.wav
 analog2wav
 build/
+
+**/cmake-build-debug
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/CMakeFiles/
