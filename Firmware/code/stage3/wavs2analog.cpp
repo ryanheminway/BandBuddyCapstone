@@ -345,7 +345,7 @@ int main(int argc, char** argv)
 
         // Retrieve the shared memory 
         char* mem_addr = getenv(SHARED_MEMORY_ENV_VAR);
-        uint8_t* mem = (uint8_t*)attach_mem_blk(mem_addr, wav_size);
+        uint8_t* mem = (uint8_t*)get_wav_mem_blk(wav_size);
         if (!mem)
         {
             fprintf(stderr, "%s\n", "Unable to retrieve shared memory pointer!");

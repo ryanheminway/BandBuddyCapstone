@@ -4,11 +4,13 @@
 #include <stdbool.h>
 
 #define BLK_SIZE 4096   //word align 
-#define FILE_NAME   "shared_memory.txt"   
+#define WAV_DATA_KEY "shared_wav.txt"   
+#define MIDI_DATA_KEY "shared_midi.txt"
 
-void *attach_mem_blk(char *file_name, int size);
 bool detach_mem_blk(void *blk_ptr);
-bool destroy_mem_blk(char *file_name);
-
+void *get_wav_mem_blk(int &size);
+void *get_midi_mem_blk(int &size);
+bool destroy_wav_mem_blk();
+bool destroy_midi_mem_blk();
 
 #endif //SHARED_MEM

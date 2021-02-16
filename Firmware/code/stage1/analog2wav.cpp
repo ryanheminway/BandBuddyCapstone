@@ -495,7 +495,8 @@ int write_wav_data(uint8_t* mem)
 int write_to_shared_mem(char* path)
 {
     // Open the shared memory block 
-    uint8_t* shared_mem_blk = (uint8_t*)attach_mem_blk((char*)path, num_bytes_read + 44);
+    int size = num_bytes_read + 44;
+    uint8_t* shared_mem_blk = (uint8_t*)get_wav_mem_blk(size);
     if (!shared_mem_blk)
     {
         fprintf(stderr, "Failed to open shared memory block!\n");

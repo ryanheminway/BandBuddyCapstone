@@ -197,7 +197,7 @@ int send_wav_shared_mem(int &socket_fd, uint32_t &size){
     } 
 
     //get shared_mem buffer  
-    shared_mem_blk = (unsigned char *)attach_mem_blk(FILE_NAME, size);
+    shared_mem_blk = (unsigned char *)get_wav_mem_blk(payload_size);
 
     if(shared_mem_blk == NULL){
         printf("Could not get memory block\n");

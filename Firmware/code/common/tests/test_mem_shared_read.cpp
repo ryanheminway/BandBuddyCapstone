@@ -3,7 +3,8 @@
 #include <string.h>
 
 int main(void){
-    char *mem_blk = (char *)attach_mem_blk(FILE_NAME, BLK_SIZE);
+    int size = BLK_SIZE;
+    char *mem_blk = (char *)get_wav_mem_blk(size);
 
     if (mem_blk == NULL)
     {

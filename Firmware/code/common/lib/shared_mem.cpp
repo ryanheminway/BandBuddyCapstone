@@ -26,7 +26,7 @@ static int get_blk_id(char *file_name, int size){
 //@param file_name ---> name of the file associated with block
 //@param size ----> size of block of memory. keep it word align
 //@return ----> pointer to memory block
-void *attach_mem_blk(char *file_name, int size){
+static void *attach_mem_blk(char *file_name, int &size){
     int shared_blk_id = get_blk_id(file_name, size);
     void *ret = NULL;
 
@@ -52,7 +52,7 @@ void *attach_mem_blk(char *file_name, int size){
 //when there are no more processes using the memory block, it should be destroyed to free up memory using this function
 //@param file_name ---> file name associiated with shared memory block
 //@return success/fail(true/false)
-bool destroy_mem_blk(char *file_name){
+static bool destroy_mem_blk(char *file_name){
     int shared_blk_id = get_blk_id(file_name, 0);
 
     if(shared_blk_id == IPC_ERROR){
@@ -62,3 +62,18 @@ bool destroy_mem_blk(char *file_name){
     return (shmctl(shared_blk_id, IPC_RMID, NULL) != IPC_ERROR);
 }
 
+void *get_wav_mem_blk(int &size){
+    return attach_mem_blk(WAV_DATA_KEY, size);
+}
+
+void *get_midi_mem_blk(int &size){
+    return attach_mem_blk(MIDI_DATA_KEY, size);
+}
+
+bool destroy_wav_mem_blk(){
+    return destroy_mem_blk(WAV_DATA_KEY);
+}
+
+bool destroy_midi_mem_blk(){
+    return destroy_mem_blk(MIDI_DATA_KEY);
+}

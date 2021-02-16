@@ -110,8 +110,8 @@ int recieve_and_mem_shared_stage2_data(int &sock_fd, int &payload_size){
         return ret;
     }
 
-    //get shared_mem block andd write it 
-    shared_mem_blk = (uint8_t *)attach_mem_blk(FILE_NAME, BLK_SIZE);
+    //get shared_mem block and write it 
+    shared_mem_blk = (uint8_t *)get_midi_mem_blk(payload_size);
     if ( shared_mem_blk == NULL)
     {
         printf("Could not get memory block\n");
