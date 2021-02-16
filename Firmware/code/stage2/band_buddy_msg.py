@@ -60,7 +60,7 @@ def recv_msg(sock_fd, n):
     # Helper function to recv n bytes or return None if EOF is hit
     data = bytearray()
     while len(data) < n:
-        packet = sock.recv(n - len(data))
+        packet = sock_fd.recv(n - len(data))
         if not packet:
             return None
         data.extend(packet)
@@ -81,3 +81,4 @@ if __name__ == "__main__":
     host = "127.0.0.1"
     port = 8080
     socket_fd = connect_and_register(host, port)
+    socket_fd.close()
