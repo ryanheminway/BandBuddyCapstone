@@ -75,10 +75,47 @@ def get_payload(sock_fd, size):
     raw_data = recv_msg(socket_fd, size)
     return raw_data
 
+def send_payload(sock_fd, buf):
+    sock_fd.sendall(buf)
+
+def send_midi_data(sock_fd, raw_data, size):
+    payload_size = size
+    destination = stages.Stages().Stage3
+    cmd = cmd.Cmds().Stage2_data_ready
+    stage_id = stages.Stages().Stage2
+
+    create_and_send_header(sock_fd, payload_size, destination, cmd, stage_id)
+    send_payload(sock_fd, raw_data)
+
+def recv_wav_msg(sock_fd):
+    header_fbb = recv_header(sock_fd)
+
+    ##error checking 
+    if header_fbb.Destination() != stages.Stages().Stage2 and header_fbb.Cmd() != cmds.Cmds().Stage1_data :
+        return FAILED
+    else :
+        buf = get_payload(sock_fd, header_fbb.PayloadSize())
+
+
 if __name__ == "__main__":
     header_len = get_header_size() 
     print(header_len)
     host = "127.0.0.1"
     port = 8080
+
     socket_fd = connect_and_register(host, port)
-    socket_fd.close()
+
+    while True:
+        try:
+            #Recieve wav data
+            print("Waiting for wav data\n")
+            wav_data = recv_wav_msg(socket_fd)
+
+            ##send "midi data back to stage 3"
+            print("Sendind midi data\n")
+            send_midi_data(socket_fd, wav_data, len(wav_data))
+
+        except KeyboardInterrupt:
+            print("Shutting down stage2")
+            socket_fd.close()
+            sys.exit(0)
