@@ -63,6 +63,36 @@ inline flatbuffers::Offset<Stage1> CreateStage1(
   return builder_.Finish();
 }
 
+inline const Server::Stage1::Stage1 *GetStage1(const void *buf) {
+  return flatbuffers::GetRoot<Server::Stage1::Stage1>(buf);
+}
+
+inline const Server::Stage1::Stage1 *GetSizePrefixedStage1(const void *buf) {
+  return flatbuffers::GetSizePrefixedRoot<Server::Stage1::Stage1>(buf);
+}
+
+inline bool VerifyStage1Buffer(
+    flatbuffers::Verifier &verifier) {
+  return verifier.VerifyBuffer<Server::Stage1::Stage1>(nullptr);
+}
+
+inline bool VerifySizePrefixedStage1Buffer(
+    flatbuffers::Verifier &verifier) {
+  return verifier.VerifySizePrefixedBuffer<Server::Stage1::Stage1>(nullptr);
+}
+
+inline void FinishStage1Buffer(
+    flatbuffers::FlatBufferBuilder &fbb,
+    flatbuffers::Offset<Server::Stage1::Stage1> root) {
+  fbb.Finish(root);
+}
+
+inline void FinishSizePrefixedStage1Buffer(
+    flatbuffers::FlatBufferBuilder &fbb,
+    flatbuffers::Offset<Server::Stage1::Stage1> root) {
+  fbb.FinishSizePrefixed(root);
+}
+
 }  // namespace Stage1
 }  // namespace Server
 

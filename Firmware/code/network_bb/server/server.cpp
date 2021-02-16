@@ -31,7 +31,7 @@ int main(int argc , char *argv[])
     int master_socket , addrlen , new_socket , client_socket[MAX_CLIENTS],  
         activity, i , valread , sd;   
     int max_sd;
-    int destination, cmd, stage_id, size;
+    int destination, cmd, stage_id, payload_size;
     struct sockaddr_in address;
          
     char buffer[MAX_BUFFER_SIZE];  //data buffer of 1K  
@@ -143,7 +143,7 @@ int main(int argc , char *argv[])
             }
 
             // Extract information from flatbuffer
-            parse_header(buffer, destination, cmd, stage_id, size);
+            parse_header(buffer, destination, cmd, stage_id, payload_size);
                  
             // Register client by saving its sockfd based on stage_id
            if(register_client(client_socket, stage_id, new_socket) < 0) {
@@ -185,16 +185,23 @@ int main(int argc , char *argv[])
                 // Run appropriate functions based on cmd in header
                 else 
                 {
-                    parse_header(buffer, destination, cmd, stage_id, size);
+                    parse_header(buffer, destination, cmd, stage_id, payload_size);
 
                     switch(cmd) {
                         case STAGE1_DATA_READY:
                             std::cout << "Processing stage 1 data ready" << std::endl;
-                            send_wav_shared_mem(client_socket[destination], size);
+                            uint32_t wav_data_sz;
+
+                            if (recieve_stage1_fbb(sd, payload_size, wav_data_sz) != FAILED){
+                                send_wav_shared_mem(client_socket[destination], wav_data_sz);
+                            } else{
+                                std::cout<< " Could not recieve payload\n";
+                            }
+
                             break;
                         case STAGE2_DATA_READY:
-                            // TODO: stage2_data_ready function
                             std::cout << "Processing stage 2 data ready" << std::endl;
+                            recieve_and_mem_shared_stage2_data(sd, payload_size);
                             break;
                         case STAGE3_DATA_READY:
                             // TODO: stage3_data_ready function

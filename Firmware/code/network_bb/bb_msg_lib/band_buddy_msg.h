@@ -36,6 +36,6 @@ int get_header_size();
 int connect_and_register(int &stage_id, int &socket_fd);
 int stage1_data_ready(int &socket_fd, int &size);
 int send_wav_file(int &socket_fd, struct wave_header &wav_hdr, int8_t *raw_data, int &size);
-int send_wav_shared_mem(int &socket_fd, int &size);
+int send_wav_shared_mem(int &socket_fd, uint32_t &size);
 
 #endif //BAND_BUDDY_MSG

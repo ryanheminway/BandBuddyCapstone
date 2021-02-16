@@ -179,7 +179,7 @@ int send_wav_file(int &socket_fd, struct wave_header &wav_hdr, int8_t *raw_data,
     return ret;
 }
 
-int send_wav_shared_mem(int &socket_fd, int &size){
+int send_wav_shared_mem(int &socket_fd, uint32_t &size){
     int ret = FAILED;
     int cmd = STAGE1_DATA;
     int destination = STAGE2;
