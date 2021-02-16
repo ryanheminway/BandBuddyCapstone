@@ -1,1 +1,0 @@
-/usr/bin/c++     CMakeFiles/analog2wav.dir/analog2wav.cpp.o  -o analog2wav  -lasound ../common/lib/libshared_mem.a 

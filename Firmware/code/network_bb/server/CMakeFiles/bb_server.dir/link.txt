@@ -1,1 +1,0 @@
-/usr/bin/c++     CMakeFiles/bb_server.dir/server.cpp.o  -o bb_server  ../bb_msg_lib/libmsg_lib.a ../../common/lib/libshared_mem.a 

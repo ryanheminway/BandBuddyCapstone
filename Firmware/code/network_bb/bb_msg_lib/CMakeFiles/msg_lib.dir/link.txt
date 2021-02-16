@@ -1,2 +1,0 @@
-/usr/bin/ar qc libmsg_lib.a  CMakeFiles/msg_lib.dir/band_buddy_msg.cpp.o CMakeFiles/msg_lib.dir/band_buddy_server.cpp.o
-/usr/bin/ranlib libmsg_lib.a

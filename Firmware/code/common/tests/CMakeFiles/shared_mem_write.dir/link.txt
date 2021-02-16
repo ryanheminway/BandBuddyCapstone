@@ -1,1 +1,0 @@
-/usr/bin/c++     CMakeFiles/shared_mem_write.dir/test_mem_shared_write.cpp.o  -o shared_mem_write  ../lib/libshared_mem.a 
