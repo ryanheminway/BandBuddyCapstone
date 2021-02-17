@@ -31,6 +31,8 @@ struct wave_header
 
 #define WAVE_HEADER_SIZE sizeof(struct wave_header)
 
+#define pd(s) printf("\n%s: %s:%s\n     %s: %d\n", __FILE__, __func__, __LINE__, #s, s)
+#define ps(s) printf("\n%s: %s:%d\n     %s: %d\n", __FILE__, __func__, __LINE__, #s, s)
 
 int get_header_size();
 int connect_and_register(int &stage_id, int &socket_fd);

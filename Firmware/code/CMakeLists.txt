@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(BandBuddy VERSION 1.0.0)
 
+add_definitions(-Wall -std=c11 -ggdb3)
+
 set (CMAKE_CXX_STANDARD 11)
 
 add_subdirectory(common/lib)

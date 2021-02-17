@@ -186,17 +186,21 @@ int main(int argc , char *argv[])
                 else 
                 {
                     parse_header(buffer, destination, cmd, stage_id, payload_size);
+                    std::cout << "payload after in server: " << payload_size << std::endl;
 
                     switch(cmd) {
                         case STAGE1_DATA_READY:
                             std::cout << "Processing stage 1 data ready" << std::endl;
                             uint32_t wav_data_sz;
+                            wav_data_sz = (uint32_t)payload_size;
 
-                            if (recieve_stage1_fbb(sd, payload_size, wav_data_sz) != FAILED){
-                                send_wav_shared_mem(client_socket[destination], wav_data_sz);
-                            } else{
-                                std::cout<< " Could not recieve payload\n";
-                            }
+                            send_wav_shared_mem(client_socket[destination], wav_data_sz);
+
+                            // if (recieve_stage1_fbb(sd, payload_size, wav_data_sz) != FAILED){
+                            //     send_wav_shared_mem(client_socket[destination], wav_data_sz);
+                            // } else{
+                            //     std::cout<< " Could not recieve payload\n";
+                            // }
 
                             break;
                         case STAGE2_DATA_READY:

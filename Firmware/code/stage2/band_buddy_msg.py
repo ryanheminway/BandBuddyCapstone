@@ -92,6 +92,7 @@ def recv_wav_msg(sock_fd):
 
     ##error checking 
     if header_fbb.Destination() != stages.Stages().Stage2 and header_fbb.Cmd() != cmds.Cmds().Stage1_data :
+        print("Failed triggered")
         return FAILED
     else :
         buf = get_payload(sock_fd, header_fbb.PayloadSize())
@@ -110,6 +111,8 @@ if __name__ == "__main__":
             #Recieve wav data
             print("Waiting for wav data\n")
             wav_data = recv_wav_msg(socket_fd)
+
+            print("wave data: " + wav_data)
 
             ##send "midi data back to stage 3"
             print("Sendind midi data\n")

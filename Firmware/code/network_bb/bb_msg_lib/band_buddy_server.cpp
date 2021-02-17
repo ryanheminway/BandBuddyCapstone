@@ -22,14 +22,21 @@ int retrieve_header(char *buffer, int sockfd) {
     int ret = -1;
     int header_size = get_header_size();
 
-#ifdef DEBUG
+// #ifdef DEBUG
     std::cout << "Header size: " << header_size << std::endl;
-#endif
+// #endif
 
     ret = read(sockfd, buffer, header_size);
-    #ifdef DEBUG
+    // while(count <= header_size) {
+    //     ret = read(sockfd, buffer + count, header_size - count);
+    //     count += ret;
+    //     ps(ret);
+    // }
+
+    // #ifdef DEBUG
     std::cout << "Msg: " << buffer << std::endl;
-    #endif
+    ps(ret);
+    // #endif
     if(ret < 0) {
         std::cout << "Error in receiving header" << std::endl;
     }
@@ -42,9 +49,9 @@ int parse_header(char *buffer, int &destination, int &cmd, int &stage_id, int &s
     destination = static_cast<int>(header->destination());
     cmd = static_cast<int>(header->cmd());
     stage_id = static_cast<int>(header->stage_id());
-    size = static_cast<int>(header->size());
+    size = static_cast<uint32_t>(header->size());
 
-    std::cout << "stage id" << stage_id << std::endl;
+    std::cout << "stage id: " << stage_id << std::endl;
     std::cout << "dest: " << destination << std::endl;
     std::cout << "cmd: " << cmd << std::endl;
     std::cout << "size: " << size << std::endl;
@@ -64,6 +71,8 @@ int register_client(int *client_lst, int id, int sockfd) {
 static int retrieve_payload(int &sock_fd, int &payload_size, uint8_t **raw_data){
     int ret = FAILED;
 
+    ps(payload_size);
+
     *(raw_data) = (uint8_t *)malloc(payload_size);
 
     if(*(raw_data) == NULL){
@@ -71,6 +80,9 @@ static int retrieve_payload(int &sock_fd, int &payload_size, uint8_t **raw_data)
     }
 
     ret = read(sock_fd, *(raw_data), payload_size);
+
+    ps(ret);
+    ps(payload_size);
 
     if(ret < 0) {
         std::cout << "Error in recieving payload\n";
@@ -92,6 +104,8 @@ int recieve_stage1_fbb(int &sock_fd, int &payload_sz, uint32_t &wave_data_sz){
 
     auto stage1_fb = GetStage1(buffer_ptr);
     wave_data_sz = stage1_fb->wave_data_sz();
+
+    ps(wave_data_sz);
 
     ret = SUCCESS;
     free(buffer_ptr);

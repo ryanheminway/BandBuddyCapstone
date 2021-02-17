@@ -9,6 +9,7 @@
 #include <string.h> 
 #include <sys/socket.h> 
 #include <arpa/inet.h>
+#include <iostream>
 
 #define MAX 80 
 #define PORT 8080 
@@ -77,14 +78,26 @@ static int create_and_send_header(int &socket_fd, int &payload_size, int &destin
     Stages this_stage = static_cast<Stages>(stage_id);
 
     //create header
-    auto header = CreateHeader(builder, payload_size, dest, command, this_stage);
+    // auto header = CreateHeader(builder, payload_size, dest, command, this_stage);
+    HeaderBuilder header_builder(builder);
+    header_builder.add_size(payload_size);
+    header_builder.add_destination(dest);
+    header_builder.add_cmd(command);
+    header_builder.add_stage_id(this_stage);
+
+    auto header = header_builder.Finish();
     builder.Finish(header);
 
     auto header_ptr = builder.GetBufferPointer();
     int size = builder.GetSize();
+    // int size = get_header_size();
+    ps(size);
 
-    // ret = write(socket_fd, &size, sizeof(size));
     ret = write(socket_fd, header_ptr, size);
+
+    builder.Clear();
+
+    ps(ret);
 
     return ret != FAILED ? SUCCESS : FAILED;
 
@@ -94,9 +107,10 @@ static int register_stage(int &socket_fd, int &stage_id){
     int ret = FAILED;
     int cmd = REGISTER;
     int destination = STAGE1; // DUMMY value. it does not matter 
-    int payload_size = 0; // no payload message
+    int payload_size = 24; // no payload message
 
     ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+
     return ret;
 }
 
@@ -128,19 +142,36 @@ int stage1_data_ready(int &socket_fd, int &size){
     int data_ready = 1;
     flatbuffers::FlatBufferBuilder builder;  
 
-    auto stage1_msg = CreateStage1(builder, data_ready, size);
+    // auto stage1_msg = CreateStage1(builder, data_ready, size);
+
+    Stage1Builder stage1_builder(builder);
+    stage1_builder.add_ready(1);
+    stage1_builder.add_wave_data_sz(size);
+
+    auto stage1_msg = stage1_builder.Finish();
+
+    ps(size);
     builder.Finish(stage1_msg);
 
     auto stage1_msg_ptr = builder.GetBufferPointer();
+
     payload_size = builder.GetSize();
 
-    ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+    ps(payload_size);
+
+#ifdef DEBUG
+    std::cout << "payload size: " << payload_size << std::endl;
+#endif
+
+    int test = 200;
+    ret = create_and_send_header(socket_fd, size, destination, cmd, stage_id);
+    // ret = create_and_send_header(socket_fd, size, destination, cmd, stage_id);
     if(ret == FAILED){
         printf("Error while sending header message to server\n");
         return ret;
     }
 
-    ret = send_payload(socket_fd, stage1_msg_ptr, payload_size);
+    // ret = send_payload(socket_fd, stage1_msg_ptr, payload_size);
 
     builder.Clear();
 
@@ -199,15 +230,21 @@ int send_wav_shared_mem(int &socket_fd, uint32_t &size){
     //get shared_mem buffer  
     shared_mem_blk = (unsigned char *)get_wav_mem_blk(payload_size);
 
+    std::cout << "size in send_wav_shared_mem: " << payload_size << std::endl;
+
     if(shared_mem_blk == NULL){
         printf("Could not get memory block\n");
         return FAILED;
     }
-   ret = send_payload(socket_fd, shared_mem_blk, size);
 
-   //detach 
-   detach_mem_blk(shared_mem_blk);
+    // std::cout << "wav data: " << shared_mem_blk << std::endl;
+    pd(shared_mem_blk);
 
-   return ret;
+    ret = send_payload(socket_fd, shared_mem_blk, payload_size);
+
+    //detach
+    detach_mem_blk(shared_mem_blk);
+
+    return ret;
    
 }

@@ -28,6 +28,8 @@ int main(void){
 
     int message_sz = strlen(message) + 1;
 
+    std::cout << "Message: " << message_sz << std::endl;
+
     printf("Writing data to shared memory\n");
     memcpy(mem_blk, message, message_sz);
 
