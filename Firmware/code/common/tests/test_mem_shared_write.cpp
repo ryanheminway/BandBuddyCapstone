@@ -4,6 +4,7 @@
 #include <iostream>
 #include "band_buddy_msg.h"
 #include "band_buddy_server.h"
+#include <unistd.h>
 
 int main(void){
     const char *message = "This is a test write into mem shared block";
@@ -33,9 +34,8 @@ int main(void){
 
     stage1_data_ready(sock_fd, message_sz);
 
-
-
     detach_mem_blk(mem_blk);
+    close(sock_fd);
     
     return 0;
 }

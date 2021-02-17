@@ -169,7 +169,7 @@ int main(int argc , char *argv[])
                     ...
                 */
 
-                if (retrieve_header(buffer, sd) == 0)
+                if (retrieve_header(buffer, sd) == FAILED)
                 {   
                     //Somebody disconnected , get his details and print  
                     getpeername(sd , (struct sockaddr*)&address , (socklen_t*)&addrlen);
