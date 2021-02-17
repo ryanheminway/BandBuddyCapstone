@@ -1,8 +1,8 @@
 namespace Server.Header;
 
-enum Stages:ubyte {Stage1 = 0, Stage2, Stage3 = 2}
+enum Stages:uint32 {Stage1 = 0, Stage2, Stage3 = 2}
 
-enum Cmds:ubyte {Register = 0, Stage1_data_ready, Stage2_data_ready, Stage3_data_ready, Stage1_data = 4}
+enum Cmds:uint32 {Register = 0, Stage1_data_ready, Stage2_data_ready, Stage3_data_ready, Stage1_data = 4}
 
 table Header {
     payload_size:uint32;

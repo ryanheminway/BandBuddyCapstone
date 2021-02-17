@@ -12,7 +12,7 @@ namespace Header {
 struct Header;
 struct HeaderBuilder;
 
-enum Stages : uint8_t {
+enum Stages : uint32_t {
   Stages_Stage1 = 0,
   Stages_Stage2 = 1,
   Stages_Stage3 = 2,
@@ -45,38 +45,41 @@ inline const char *EnumNameStages(Stages e) {
   return EnumNamesStages()[index];
 }
 
-enum Cmds : uint8_t {
+enum Cmds : uint32_t {
   Cmds_Register = 0,
   Cmds_Stage1_data_ready = 1,
   Cmds_Stage2_data_ready = 2,
   Cmds_Stage3_data_ready = 3,
+  Cmds_Stage1_data = 4,
   Cmds_MIN = Cmds_Register,
-  Cmds_MAX = Cmds_Stage3_data_ready
+  Cmds_MAX = Cmds_Stage1_data
 };
 
-inline const Cmds (&EnumValuesCmds())[4] {
+inline const Cmds (&EnumValuesCmds())[5] {
   static const Cmds values[] = {
     Cmds_Register,
     Cmds_Stage1_data_ready,
     Cmds_Stage2_data_ready,
-    Cmds_Stage3_data_ready
+    Cmds_Stage3_data_ready,
+    Cmds_Stage1_data
   };
   return values;
 }
 
 inline const char * const *EnumNamesCmds() {
-  static const char * const names[5] = {
+  static const char * const names[6] = {
     "Register",
     "Stage1_data_ready",
     "Stage2_data_ready",
     "Stage3_data_ready",
+    "Stage1_data",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameCmds(Cmds e) {
-  if (flatbuffers::IsOutRange(e, Cmds_Register, Cmds_Stage3_data_ready)) return "";
+  if (flatbuffers::IsOutRange(e, Cmds_Register, Cmds_Stage1_data)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesCmds()[index];
 }
@@ -84,29 +87,29 @@ inline const char *EnumNameCmds(Cmds e) {
 struct Header FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef HeaderBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_SIZE = 4,
+    VT_PAYLOAD_SIZE = 4,
     VT_DESTINATION = 6,
     VT_CMD = 8,
     VT_STAGE_ID = 10
   };
-  uint32_t size() const {
-    return GetField<uint32_t>(VT_SIZE, 0);
+  uint32_t payload_size() const {
+    return GetField<uint32_t>(VT_PAYLOAD_SIZE, 0);
   }
   Server::Header::Stages destination() const {
-    return static_cast<Server::Header::Stages>(GetField<uint8_t>(VT_DESTINATION, 0));
+    return static_cast<Server::Header::Stages>(GetField<uint32_t>(VT_DESTINATION, 0));
   }
   Server::Header::Cmds cmd() const {
-    return static_cast<Server::Header::Cmds>(GetField<uint8_t>(VT_CMD, 0));
+    return static_cast<Server::Header::Cmds>(GetField<uint32_t>(VT_CMD, 0));
   }
   Server::Header::Stages stage_id() const {
-    return static_cast<Server::Header::Stages>(GetField<uint8_t>(VT_STAGE_ID, 0));
+    return static_cast<Server::Header::Stages>(GetField<uint32_t>(VT_STAGE_ID, 0));
   }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<uint32_t>(verifier, VT_SIZE) &&
-           VerifyField<uint8_t>(verifier, VT_DESTINATION) &&
-           VerifyField<uint8_t>(verifier, VT_CMD) &&
-           VerifyField<uint8_t>(verifier, VT_STAGE_ID) &&
+           VerifyField<uint32_t>(verifier, VT_PAYLOAD_SIZE) &&
+           VerifyField<uint32_t>(verifier, VT_DESTINATION) &&
+           VerifyField<uint32_t>(verifier, VT_CMD) &&
+           VerifyField<uint32_t>(verifier, VT_STAGE_ID) &&
            verifier.EndTable();
   }
 };
@@ -115,17 +118,17 @@ struct HeaderBuilder {
   typedef Header Table;
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
-  void add_size(uint32_t size) {
-    fbb_.AddElement<uint32_t>(Header::VT_SIZE, size, 0);
+  void add_payload_size(uint32_t payload_size) {
+    fbb_.AddElement<uint32_t>(Header::VT_PAYLOAD_SIZE, payload_size, 0);
   }
   void add_destination(Server::Header::Stages destination) {
-    fbb_.AddElement<uint8_t>(Header::VT_DESTINATION, static_cast<uint8_t>(destination), 0);
+    fbb_.AddElement<uint32_t>(Header::VT_DESTINATION, static_cast<uint32_t>(destination), 0);
   }
   void add_cmd(Server::Header::Cmds cmd) {
-    fbb_.AddElement<uint8_t>(Header::VT_CMD, static_cast<uint8_t>(cmd), 0);
+    fbb_.AddElement<uint32_t>(Header::VT_CMD, static_cast<uint32_t>(cmd), 0);
   }
   void add_stage_id(Server::Header::Stages stage_id) {
-    fbb_.AddElement<uint8_t>(Header::VT_STAGE_ID, static_cast<uint8_t>(stage_id), 0);
+    fbb_.AddElement<uint32_t>(Header::VT_STAGE_ID, static_cast<uint32_t>(stage_id), 0);
   }
   explicit HeaderBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -140,15 +143,15 @@ struct HeaderBuilder {
 
 inline flatbuffers::Offset<Header> CreateHeader(
     flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t size = 0,
+    uint32_t payload_size = 0,
     Server::Header::Stages destination = Server::Header::Stages_Stage1,
     Server::Header::Cmds cmd = Server::Header::Cmds_Register,
     Server::Header::Stages stage_id = Server::Header::Stages_Stage1) {
   HeaderBuilder builder_(_fbb);
-  builder_.add_size(size);
   builder_.add_stage_id(stage_id);
   builder_.add_cmd(cmd);
   builder_.add_destination(destination);
+  builder_.add_payload_size(payload_size);
   return builder_.Finish();
 }
 

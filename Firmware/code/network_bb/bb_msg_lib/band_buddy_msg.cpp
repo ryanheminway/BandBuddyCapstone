@@ -50,6 +50,8 @@ static int get_socket_discriptor(){
     return sockfd;
 }
 
+
+
 int get_header_size(){
     int ret = FAILED;
     flatbuffers::FlatBufferBuilder builder;
@@ -76,11 +78,12 @@ static int create_and_send_header(int &socket_fd, int &payload_size, int &destin
     Stages dest = static_cast<Stages>(destination);
     Cmds command = static_cast<Cmds>(cmd);
     Stages this_stage = static_cast<Stages>(stage_id);
+    
 
     //create header
     // auto header = CreateHeader(builder, payload_size, dest, command, this_stage);
     HeaderBuilder header_builder(builder);
-    header_builder.add_size(payload_size);
+    header_builder.add_payload_size(payload_size);
     header_builder.add_destination(dest);
     header_builder.add_cmd(command);
     header_builder.add_stage_id(this_stage);
@@ -93,11 +96,17 @@ static int create_and_send_header(int &socket_fd, int &payload_size, int &destin
     // int size = get_header_size();
     ps(size);
 
-    ret = write(socket_fd, header_ptr, size);
+    ret = send(socket_fd, &size, sizeof(size), 0);
+
+    ret = send(socket_fd, header_ptr, size, 0);
+
+    if(ret != size){
+        std::cout << "Did not send all the data\n";
+        std::cout << "Size of data sent = " << ret << std::endl;
+        return FAILED;
+    }
 
     builder.Clear();
-
-    ps(ret);
 
     return ret != FAILED ? SUCCESS : FAILED;
 
@@ -107,7 +116,7 @@ static int register_stage(int &socket_fd, int &stage_id){
     int ret = FAILED;
     int cmd = REGISTER;
     int destination = STAGE1; // DUMMY value. it does not matter 
-    int payload_size = 24; // no payload message
+    int payload_size = 0; // no payload message
 
     ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
 

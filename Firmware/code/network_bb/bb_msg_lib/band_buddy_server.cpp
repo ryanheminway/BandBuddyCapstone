@@ -20,13 +20,13 @@ using namespace Server::Stage1;
 
 int retrieve_header(char *buffer, int sockfd) {
     int ret = -1;
-    int header_size = get_header_size();
+    int header_size = 0; 
 
 // #ifdef DEBUG
     std::cout << "Header size: " << header_size << std::endl;
 // #endif
-
-    ret = read(sockfd, buffer, header_size);
+    ret = recv(sockfd, &header_size, sizeof(header_size), MSG_WAITALL);
+    ret = recv(sockfd, buffer, header_size, MSG_WAITALL);
     // while(count <= header_size) {
     //     ret = read(sockfd, buffer + count, header_size - count);
     //     count += ret;
@@ -49,7 +49,7 @@ int parse_header(char *buffer, int &destination, int &cmd, int &stage_id, int &s
     destination = static_cast<int>(header->destination());
     cmd = static_cast<int>(header->cmd());
     stage_id = static_cast<int>(header->stage_id());
-    size = static_cast<uint32_t>(header->size());
+    size = static_cast<uint32_t>(header->payload_size());
 
     std::cout << "stage id: " << stage_id << std::endl;
     std::cout << "dest: " << destination << std::endl;
