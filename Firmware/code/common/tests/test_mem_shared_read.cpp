@@ -4,6 +4,7 @@
 
 int main(void){
     int size = BLK_SIZE;
+
     char *mem_blk = (char *)get_wav_mem_blk(size);
 
     if (mem_blk == NULL)
