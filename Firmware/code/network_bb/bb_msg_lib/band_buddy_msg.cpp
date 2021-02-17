@@ -84,6 +84,7 @@ static int create_and_send_header(int &socket_fd, int &payload_size, int &destin
     int size = builder.GetSize();
 
     // ret = write(socket_fd, &size, sizeof(size));
+    ret = write(socket_fd, &size, sizeof(size));
     ret = write(socket_fd, header_ptr, size);
 
     return ret != FAILED ? SUCCESS : FAILED;
