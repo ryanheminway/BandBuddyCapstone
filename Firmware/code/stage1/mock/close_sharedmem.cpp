@@ -12,12 +12,9 @@
 
 #include "shared_mem.h"
 
-// The key of the shared memory block; should probably be an env variable?
-#define SHARED_MEMORY_BLOCK_KEY ((char*)"/home/patch/BandBuddyCapstone/Firmware/code/common/shared_mem_key")
-
 int main(int argc, char** argv)
 {
-    bool success = destroy_mem_blk(SHARED_MEMORY_BLOCK_KEY);
+    bool success = destroy_wav_mem_blk();
     if (!success)
     {
         fprintf(stdout, "Failed to destroy!\n");

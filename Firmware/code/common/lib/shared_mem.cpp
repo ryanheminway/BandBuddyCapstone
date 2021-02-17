@@ -10,7 +10,7 @@
 //ERROR codes
 #define IPC_ERROR   (-1)
 
-static int get_blk_id(char *file_name, int size){
+static int get_blk_id(const char *file_name, int size){
     key_t file_key;
 
     file_key = ftok(file_name, 0);
@@ -26,7 +26,7 @@ static int get_blk_id(char *file_name, int size){
 //@param file_name ---> name of the file associated with block
 //@param size ----> size of block of memory. keep it word align
 //@return ----> pointer to memory block
-static void *attach_mem_blk(char *file_name, int &size){
+static void *attach_mem_blk(const char *file_name, int &size){
     int shared_blk_id = get_blk_id(file_name, size);
     void *ret = NULL;
 
@@ -52,7 +52,7 @@ static void *attach_mem_blk(char *file_name, int &size){
 //when there are no more processes using the memory block, it should be destroyed to free up memory using this function
 //@param file_name ---> file name associiated with shared memory block
 //@return success/fail(true/false)
-static bool destroy_mem_blk(char *file_name){
+static bool destroy_mem_blk(const char *file_name){
     int shared_blk_id = get_blk_id(file_name, 0);
 
     if(shared_blk_id == IPC_ERROR){

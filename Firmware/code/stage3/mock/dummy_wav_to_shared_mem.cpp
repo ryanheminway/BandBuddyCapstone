@@ -1,4 +1,3 @@
-#include "shared_mem.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,21 +13,19 @@
 
 #include "shared_mem.h"
 
-#define SHARED_MEMORY_ENV_VAR "BANDBUDDY_SHARED_MEMORY_KEY"
-
 #define DUMMY_FILE ((char*)"/home/patch/BandBuddyCapstone/Firmware/code/stage3/mock/hcb.wav")
 
 int main()
 {
     // Get mock music file size 
-    off_t size;
+    int size;
     struct stat st;
     if (stat(DUMMY_FILE, &st) != 0)
     {
         fprintf(stderr, "%s\n", "stat failed!"); return 1;
     }
 
-    size = st.st_size;
+    size = (int)st.st_size;
 
     // Open the mock music file 
     FILE* wav = fopen(DUMMY_FILE, "r");
@@ -38,8 +35,7 @@ int main()
     }
     
     // Acquire the shared memory
-    char* env_var = getenv(SHARED_MEMORY_ENV_VAR);
-    uint8_t* shared_mem = (uint8_t*)attach_mem_blk(env_var, size);
+    uint8_t* shared_mem = (uint8_t*)get_midi_mem_blk(size);
     if (!shared_mem)
     {
         fprintf(stderr, "%s\n", "attach_mem_blk failed!"); return 1;

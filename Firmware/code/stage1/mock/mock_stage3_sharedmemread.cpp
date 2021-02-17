@@ -10,11 +10,6 @@
 #include <condition_variable>
 #include <mutex>
 
-
-// The key of the shared memory block; should probably be an env variable?
-#define SHARED_MEMORY_BLOCK_KEY ((char*)"/home/patch/BandBuddyCapstone/Firmware/code/common/shared_mem_key")
-
-
 int main(int argc, char** argv)
 {
     if (argc != 2) 
@@ -27,7 +22,7 @@ int main(int argc, char** argv)
     int size = atoi(size_str);
 
     // Open the shared memory block 
-    uint8_t* shared_mem_blk = (uint8_t*)attach_mem_blk(SHARED_MEMORY_BLOCK_KEY, size);
+    uint8_t* shared_mem_blk = (uint8_t*)get_wav_mem_blk(size);
     if (!shared_mem_blk)
     {
         fprintf(stderr, "Failed to open shared memory block!\n");

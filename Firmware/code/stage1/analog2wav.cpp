@@ -10,9 +10,6 @@
 
 #include "shared_mem.h"
 
-// The name of the env var containing the key of the shared memory block
-#define SHARED_MEMORY_ENV_VAR "BANDBUDDY_SHARED_MEMORY_KEY"
-
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
 
@@ -492,7 +489,7 @@ int write_wav_data(uint8_t* mem)
     return 0;
 }
 
-int write_to_shared_mem(char* path)
+int write_to_shared_mem()
 {
     // Open the shared memory block 
     int size = num_bytes_read + 44;
@@ -557,8 +554,7 @@ int main(int argc, char* argv[])
         }
 
         // Write to wav
-        char* shared_memory_key = getenv(SHARED_MEMORY_ENV_VAR);
-        if ((err = write_to_shared_mem(shared_memory_key)))
+        if ((err = write_to_shared_mem()))
         {
             break;
         }  

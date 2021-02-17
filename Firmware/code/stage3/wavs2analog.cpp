@@ -9,10 +9,6 @@
 #include "shared_mem.h"
 
 
-// The name of the env var containing the key of the shared memory block
-#define SHARED_MEMORY_ENV_VAR "BANDBUDDY_SHARED_MEMORY_KEY"
-
-
 #define SYNC_BUFFER_SIZE (1024 * 1024 * 256)
 // The buffer into which to synchronize wav data
 static uint8_t sync_buffer[SYNC_BUFFER_SIZE];
@@ -106,6 +102,12 @@ static int synchronize_wavs(uint8_t* shared_mem, int shared_mem_size)
 
     // For now, open the test file 
     FILE* test_drums = fopen("/home/patch/BandBuddyCapstone/Firmware/code/stage3/mock/hcb_drums.wav", "r");
+    if (!test_drums) 
+    {
+        fprintf(stderr, "%s\n", "The mock drum file (hbc_drums.wav) was not found! Did you forget to copy it into the stage3 mock folder?");
+        return 1;
+    }
+
     uint8_t buffer[shared_mem_size];
     fread(buffer, sizeof(uint8_t), shared_mem_size, test_drums);
 
@@ -310,7 +312,7 @@ static int loop_audio_until_cancelled(int loop_size)
     return err | close_playback_handle();
 }
 
-int delete_shared_memory(char* mem_block_addr, void* mem)
+int delete_shared_memory(void* mem)
 {
     bool err = detach_mem_blk(mem);
     #warning *** TEMPORARILY NOT DESTROYING MEMBLK AFTER PLAYTHROUGH! ***
@@ -344,8 +346,7 @@ int main(int argc, char** argv)
         }
 
         // Retrieve the shared memory 
-        char* mem_addr = getenv(SHARED_MEMORY_ENV_VAR);
-        uint8_t* mem = (uint8_t*)get_wav_mem_blk(wav_size);
+        uint8_t* mem = (uint8_t*)get_midi_mem_blk(wav_size);
         if (!mem)
         {
             fprintf(stderr, "%s\n", "Unable to retrieve shared memory pointer!");
@@ -367,7 +368,7 @@ int main(int argc, char** argv)
         }
 
         // Close and delete the shared memory - we're done with the old data
-        delete_shared_memory(mem_addr, mem);
+        delete_shared_memory(mem);
 
         if (err) 
         {
