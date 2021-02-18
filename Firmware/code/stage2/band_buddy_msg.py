@@ -73,7 +73,7 @@ def recv_header(sock_fd):
     header_size = int.from_bytes(header_size_array, "little")
 
     print("Header size after conversion " + header_size)
-    header_raw = recv_header(sock_fd, header_size)
+    header_raw = recv_msg(sock_fd, header_size)
     header_msg = header.Header.GetRootAs(header_raw, 0)
     return header_msg
 
