@@ -3,9 +3,9 @@
 #include <string.h>
 
 int main(void){
-    int size = BLK_SIZE;
+    int size = 43;
 
-    char *mem_blk = (char *)get_wav_mem_blk(size);
+    char *mem_blk = (char *)get_midi_mem_blk(size);
 
     if (mem_blk == NULL)
     {

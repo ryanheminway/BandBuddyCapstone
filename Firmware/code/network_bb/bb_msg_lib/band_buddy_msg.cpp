@@ -1,6 +1,7 @@
 #include "band_buddy_msg.h"
 #include "header_generated.h"
 #include "stage1_generated.h"
+#include "stage2_generated.h"
 #include "wave_file_generated.h"
 #include "shared_mem.h"
 #include <netdb.h> 
@@ -17,6 +18,7 @@
 
 using namespace Server::Header; 
 using namespace Server::Stage1;
+using namespace Server::Stage2;
 using namespace Server::Wave;
 
 static int get_socket_discriptor(){
@@ -83,6 +85,8 @@ static int create_and_send_header(int &socket_fd, int &payload_size, int &destin
     auto header_ptr = builder.GetBufferPointer();
     int size = builder.GetSize();
 
+    printf("Header size in create_and_send_header %d\n", size);
+
     // ret = write(socket_fd, &size, sizeof(size));
     ret = write(socket_fd, &size, sizeof(size));
     ret = write(socket_fd, header_ptr, size);
@@ -116,7 +120,7 @@ static int send_payload(int &socket_fd, unsigned char *data, int size){
     int ret = FAILED;    
     ret = write(socket_fd, data, size);
 
-    return ret != FAILED ? SUCCESS : FAILED;
+    return ret != FAILED ? ret : FAILED;
 
 }
 
@@ -149,7 +153,7 @@ int stage1_data_ready(int &socket_fd, int &size){
 }
 
 
-int stage3_data_ready(int &socket_fd, int &size){
+int stage2_data_ready(int &socket_fd, int &size){
     int ret = FAILED;
     int cmd = STAGE3_DATA_READY;
     int destination = STAGE3;
@@ -158,8 +162,8 @@ int stage3_data_ready(int &socket_fd, int &size){
     int data_ready = 1;
     flatbuffers::FlatBufferBuilder builder;  
 
-    auto stage1_msg = CreateStage1(builder, data_ready, size);
-    builder.Finish(stage1_msg);
+    auto stage2_msg = CreateStage2(builder, data_ready, size);
+    builder.Finish(stage2_msg);
 
     auto stage2_msg_ptr = builder.GetBufferPointer();
     payload_size = builder.GetSize();
@@ -233,7 +237,10 @@ int send_wav_shared_mem(int &socket_fd, uint32_t &size){
         printf("Could not get memory block\n");
         return FAILED;
     }
-   ret = send_payload(socket_fd, shared_mem_blk, size);
+
+   ret = send_payload(socket_fd, shared_mem_blk, payload_size);
+
+   printf("Byte sent through send_payload = %d\n", ret);
 
    //detach 
    detach_mem_blk(shared_mem_blk);
