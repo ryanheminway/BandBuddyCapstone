@@ -9,6 +9,8 @@
 #include <mutex>
 
 #include "shared_mem.h"
+#include "band_buddy_msg.h"
+#include "band_buddy_server.h"
 
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
@@ -45,16 +47,20 @@ static const char* alsa_capture_device_name = "plughw:CARD=pisound";
 
 
 // Cancel atomic: set high when the button is pressed
-std::atomic_bool is_button_pressed;
+static std::atomic_bool is_button_pressed;
 
 // The mutex upon which to lock the condition variable
-std::mutex is_button_pressed_mutex;
+static std::mutex is_button_pressed_mutex;
 
 // The condition variable upon which to alert a button press
-std::condition_variable is_button_pressed_cv;
+static std::condition_variable is_button_pressed_cv;
 
 // The number of bytes read in total 
 static int num_bytes_read = 0;
+
+// The socket descriptor for the network backbone
+static int networkbb_fd;
+
 
 // Button press handler
 void button_pressed(int sig)
@@ -86,6 +92,13 @@ void print_error(int err, const char* message, ...)
     fprintf(stderr, " (error: %s)\n", snd_strerror(err));
 
     va_end(args);
+}
+
+// Form the network backbone connection, return success, store the fd in networkbb_fd
+int connect_networkbb()
+{
+    int id = STAGE1;
+    return connect_and_register(id, networkbb_fd); 
 }
 
 // Initalize the capture handle for audio capture. Returns 0 on success, errno on failure.
@@ -264,6 +277,11 @@ int record_until_button_press()
 int close_capture_handle()
 {
     return snd_pcm_close(capture_handle);
+}
+
+int close_networkbb_fd()
+{
+    return close(networkbb_fd);
 }
 
 void calculate_header_values(uint32_t* chunk_size, uint16_t* num_channels, uint32_t* sample_rate, uint32_t* byte_rate, 
@@ -516,7 +534,17 @@ int write_to_shared_mem()
 
     detach_mem_blk(shared_mem_blk);
     return 0;
+}
 
+int ping_networkbb()
+{
+    int err = (stage1_data_ready(networkbb_fd, num_bytes_read) == SUCCESS) ? 0 : 1;
+    if (err)
+    {
+        fprintf(stderr, "%s\n", "Failed to notify network backbone!");
+    }
+
+    return err;
 }
 
 int main(int argc, char* argv[])
@@ -525,6 +553,13 @@ int main(int argc, char* argv[])
     signal(SIGINT, button_pressed);
 
     int err = 0;
+
+    // Initialize the server connection 
+    if (connect_networkbb() == FAILED)
+    {
+        fprintf(stderr, "%s\n", "Failed to connect to network backbone!"); 
+        return 1;
+    }
 
     while (1)
     {
@@ -553,11 +588,17 @@ int main(int argc, char* argv[])
             break;
         }
 
-        // Write to wav
+        // Write to shared memory
         if ((err = write_to_shared_mem()))
         {
             break;
-        }  
+        }
+
+        // Inform the network backbone that data is ready
+        if ((err = ping_networkbb()))
+        {
+            break;
+        }
 
         // !TEMP
         break;
@@ -567,6 +608,7 @@ int main(int argc, char* argv[])
     if (err)
     {
         close_capture_handle();
+        close_networkbb_fd();
     }
     
     // !TEMP

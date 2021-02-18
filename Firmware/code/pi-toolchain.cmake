@@ -15,4 +15,4 @@ SET(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 # Search for libraries and headers in the target directories only
 SET(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 SET(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-add_definitions(-Wall -std=c11)
+add_definitions(-Wall -std=c11 -g -Wextra)

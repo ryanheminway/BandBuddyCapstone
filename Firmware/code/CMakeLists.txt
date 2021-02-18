@@ -3,6 +3,8 @@ project(BandBuddy VERSION 1.0.0)
 
 set (CMAKE_CXX_STANDARD 11)
 
+add_definitions(-Wall -std=c11 -g -Wextra)
+
 add_subdirectory(common/lib)
 add_subdirectory(common/tests)
 add_subdirectory(network_bb/bb_msg_lib)

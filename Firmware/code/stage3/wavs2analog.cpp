@@ -7,7 +7,8 @@
 #include <signal.h>
 
 #include "shared_mem.h"
-
+#include "band_buddy_server.h"
+#include "band_buddy_msg.h"
 
 #define SYNC_BUFFER_SIZE (1024 * 1024 * 256)
 // The buffer into which to synchronize wav data
@@ -46,6 +47,11 @@ std::atomic_bool is_button_pressed;
 // The mutex upon which to lock the condition variable
 std::mutex is_button_pressed_mutex;
 
+
+// The socket descriptor for the network backbone
+static int networkbb_fd;
+
+
 // Button press handler
 void button_pressed(int sig)
 {
@@ -65,27 +71,36 @@ void print_error(int err, const char* message, ...)
     va_end(args);
 }
 
-
-// Awaits a message from the backbone containing the size of the wav file in shared memory. 
-// Returns the size, in bytes
-static int await_message_from_backbone()
+// Form the network backbone connection, return success, store the fd in networkbb_fd
+int connect_networkbb()
 {
-    // Nothing happens here yet!
-    fprintf(stdout, "%s\n", "WARNING: backbone await is commented out! Proceeding directly now.");
-#warning *** WAV FILE SIZE NOT REPORTED FROM BACKBONE - BACKBONE NOT READY YET! PASS SIZE IN BYTES TO ARGV *** 
-    return 1;
+    int id = STAGE3;
+    int err = connect_and_register(id, networkbb_fd); 
+    return err;
 }
 
-static int spoof_wav_size(int argc, char** argv)
+// Awaits a message from the backbone containing the size of the wav file in shared memory. 
+// Returns the size, in bytes, or 0 if read failed
+static int await_message_from_backbone()
 {
-    if (argc != 2) 
+    // Wait for the header
+    char header_buffer[1024];
+
+    int header_size;
+    if ((header_size = retrieve_header(header_buffer, networkbb_fd)) == FAILED)
     {
-        fprintf(stderr, "Forgot to pass in the size of the wav in bytes!\n");
+        fprintf(stderr, "%s\n", "Failed to read header from network backbone!");
         return 0;
     }
 
-    char* size_str = argv[1];
-    int size = atoi(size_str);
+    // int parse_header(char *buffer, int &destination, int &cmd, int &stage_id, int &size) {
+    int dummy, size;
+    if (parse_header(header_buffer, dummy, dummy, dummy, size) == FAILED)
+    {
+        fprintf(stderr, "%s\n", "Failed to parse the header from the network backbone!");
+        return 0;
+    }
+
     return size;
 }
 
@@ -325,6 +340,15 @@ int main(int argc, char** argv)
     // Register button press signal handler
     signal(SIGINT, button_pressed);
 
+    // Connect to the network backbone 
+    int failed = FAILED;
+    int what =connect_networkbb(); 
+    if (what == failed)
+    {
+        fprintf(stderr, "%s\n", "Could not connect to the network backbone!");
+        return 1;
+    }
+
     // This will change as it is integrated with the network backbone
     while (1)
     {
@@ -332,21 +356,15 @@ int main(int argc, char** argv)
         is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
 
         // Await instruction from the network backbone
-        int wav_size;
-        if (!(wav_size = await_message_from_backbone()))
+        int midi_size;
+        if (!(midi_size = await_message_from_backbone()))
         {
             fprintf(stderr, "%s\n", "Backbone message receive failed!");
             return 1;
         }
 
-        // Spoof the size of the 
-        if (!(wav_size = spoof_wav_size(argc, argv)))
-        {
-            return 1;
-        }
-
         // Retrieve the shared memory 
-        uint8_t* mem = (uint8_t*)get_midi_mem_blk(wav_size);
+        uint8_t* mem = (uint8_t*)get_midi_mem_blk(midi_size);
         if (!mem)
         {
             fprintf(stderr, "%s\n", "Unable to retrieve shared memory pointer!");
@@ -354,7 +372,7 @@ int main(int argc, char** argv)
         }
 
         // Synchronize the buffered wav and the return data
-        if (synchronize_wavs(mem, wav_size))
+        if (synchronize_wavs(mem, midi_size))
         {
             fprintf(stderr, "%s\n", "Failed to synchronize the wav files!");
             return 1;
@@ -362,7 +380,7 @@ int main(int argc, char** argv)
 
         // Loop the audio until told not to (!TODO ???)
         int err;
-        if ((err = loop_audio_until_cancelled(wav_size)))
+        if ((err = loop_audio_until_cancelled(midi_size)))
         {
             fprintf(stderr, "loop audio returned %d!\n", err);
         }

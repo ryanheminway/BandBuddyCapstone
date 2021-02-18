@@ -132,7 +132,7 @@ int stage1_data_ready(int &socket_fd, int &size){
     auto stage1_msg = CreateStage1(builder, data_ready, size);
     builder.Finish(stage1_msg);
 
-    auto stage1_msg_ptr = builder.GetBufferPointer();
+    auto stage2_msg_ptr = builder.GetBufferPointer();
     payload_size = builder.GetSize();
 
     ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
@@ -141,11 +141,40 @@ int stage1_data_ready(int &socket_fd, int &size){
         return ret;
     }
 
-    ret = send_payload(socket_fd, stage1_msg_ptr, payload_size);
+    ret = send_payload(socket_fd, stage2_msg_ptr, payload_size);
 
     builder.Clear();
 
-    return ret;
+    return (ret != FAILED) ? SUCCESS : FAILED;
+}
+
+
+int stage3_data_ready(int &socket_fd, int &size){
+    int ret = FAILED;
+    int cmd = STAGE3_DATA_READY;
+    int destination = STAGE3;
+    int payload_size; 
+    int stage_id = STAGE2;
+    int data_ready = 1;
+    flatbuffers::FlatBufferBuilder builder;  
+
+    auto stage1_msg = CreateStage1(builder, data_ready, size);
+    builder.Finish(stage1_msg);
+
+    auto stage2_msg_ptr = builder.GetBufferPointer();
+    payload_size = builder.GetSize();
+
+    ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+    if(ret == FAILED){
+        printf("Error while sending header message to server\n");
+        return ret;
+    }
+
+    ret = send_payload(socket_fd, stage2_msg_ptr, payload_size);
+
+    builder.Clear();
+
+    return (ret != FAILED) ? SUCCESS : FAILED;
 }
 
 int send_wav_file(int &socket_fd, struct wave_header &wav_hdr, int8_t *raw_data, int &size){

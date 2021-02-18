@@ -33,7 +33,7 @@ int retrieve_header(char *buffer, int sockfd) {
     }
     ret = read(sockfd, buffer, header_size);
     #ifdef DEBUG
-    std::cout << "Msg: " << buffer << std::endl;
+    //std::cout << "Msg: " << buffer << std::endl;
     #endif
     if(ret < 0) {
         std::cout << "Error in receiving header" << std::endl;
