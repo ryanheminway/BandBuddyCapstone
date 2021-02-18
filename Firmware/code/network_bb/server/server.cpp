@@ -139,7 +139,7 @@ int main(int argc , char *argv[])
             // Receive register message (Header flatbuffer)
             if(retrieve_header(buffer, new_socket) < 0) {
                 std::cout << "Error in retrieving header" << std::endl;
-                exit(1);
+                //exit(1);
             }
 
             // Extract information from flatbuffer
@@ -148,7 +148,7 @@ int main(int argc , char *argv[])
             // Register client by saving its sockfd based on stage_id
            if(register_client(client_socket, stage_id, new_socket) < 0) {
                std::cout << "Error registering client socket" << std::endl;
-               exit(1);
+               //exit(1);
            }
         }   
              

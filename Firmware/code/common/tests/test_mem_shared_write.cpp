@@ -24,6 +24,7 @@ int main(void){
     if (mem_blk == NULL)
     {
         printf("Could not get memory block\n");
+        close(sock_fd);
         return 1;
     }
 

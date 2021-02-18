@@ -35,9 +35,11 @@ int retrieve_header(char *buffer, int sockfd) {
     #ifdef DEBUG
     //std::cout << "Msg: " << buffer << std::endl;
     #endif
-    if(ret < 0) {
+    if(ret <= 0) {
         std::cout << "Error in receiving header" << std::endl;
+        return FAILED;
     }
+
     return ret;
 }
 

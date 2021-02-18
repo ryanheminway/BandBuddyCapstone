@@ -31,6 +31,8 @@ def create_header(payload_size, destination, cmd, stage_id):
 def create_and_send_header(sck_fd, payload_size, destination, cmd, stage_id):
     ret = FAILED
     buf = create_header(payload_size, destination, cmd, stage_id)
+    header_size = int(len(buf))
+    sck_fd.sendall(header_size.to_bytes(4, byteorder="little"))
     sck_fd.sendall(buf)
 
 def connect_and_register(host, port):
@@ -67,7 +69,11 @@ def recv_msg(sock_fd, n):
     return data
 
 def recv_header(sock_fd):
-    header_raw = recv_msg(sock_fd, get_header_size())
+    header_size_array = recv_msg(sock_fd, 4)
+    header_size = int.from_bytes(header_size_array, "little")
+
+    print("Header size after conversion " + header_size)
+    header_raw = recv_msg(sock_fd, header_size)
     header_msg = header.Header.GetRootAs(header_raw, 0)
     return header_msg
 
@@ -97,7 +103,7 @@ def recv_wav_msg(sock_fd):
         buf = get_payload(sock_fd, header_fbb.PayloadSize())
 
 
-if __name__ == "__main__":
+def test():
     header_len = get_header_size() 
     print(header_len)
     host = "127.0.0.1"
@@ -119,3 +125,7 @@ if __name__ == "__main__":
             print("Shutting down stage2")
             socket_fd.close()
             sys.exit(0)
+
+if __name__ == "__main__":
+    test()
+    
