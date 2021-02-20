@@ -9,7 +9,7 @@ int main(void) {
     int ret = FAILED;
     int sock_fd = 0;
     int stage_id = STAGE3;
-    int midi_data_sz = 0;
+    uint32_t midi_data_sz = 0;
     char *midi_data_ptr = NULL;
 
     //register stage with server 
@@ -31,6 +31,8 @@ int main(void) {
         return 1;
     }
 
+
+    std::cout << "Midi data size = " << midi_data_sz << std::endl;
  
     midi_data_ptr = (char *)get_midi_mem_blk(midi_data_sz);
 

@@ -202,6 +202,7 @@ int main(int argc , char *argv[])
                         case STAGE2_DATA_READY:
                             std::cout << "Processing stage 2 data ready" << std::endl;
                             recieve_and_mem_shared_stage2_data(sd, payload_size);
+                            stage2_data_ready(client_socket[destination], payload_size);
                             break;
                         case STAGE3_DATA_READY:
                             // TODO: stage3_data_ready function

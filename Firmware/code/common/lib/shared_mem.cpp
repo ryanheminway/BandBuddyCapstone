@@ -62,11 +62,11 @@ static bool destroy_mem_blk(const char *file_name){
     return (shmctl(shared_blk_id, IPC_RMID, NULL) != IPC_ERROR);
 }
 
-void *get_wav_mem_blk(int &size){
+void *get_wav_mem_blk(int size){
     return attach_mem_blk(WAV_DATA_KEY, size);
 }
 
-void *get_midi_mem_blk(int &size){
+void *get_midi_mem_blk(int size){
     return attach_mem_blk(MIDI_DATA_KEY, size);
 }
 

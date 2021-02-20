@@ -129,9 +129,10 @@ int recieve_stage2_fbb(int &sock_fd, int &payload_sz, uint32_t &midi_data_sz){
     return ret;
 }
 
-int recieve_header_and_stage2_fbb(int sockfd, char *buffer, uint32_t &midi_data_sz){
+int recieve_header_and_stage2_fbb(int &sockfd, uint32_t &midi_data_sz){
     int ret = FAILED;
     int destination, cmd, stage_id, payload_size;
+    char buffer[1024];
 
     ret = retrieve_header(buffer, sockfd);
 
