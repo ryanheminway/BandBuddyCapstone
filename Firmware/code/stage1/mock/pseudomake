@@ -1,0 +1,2 @@
+g++ -g -I /home/patch/BandBuddyCapstone/Firmware/code/common -o playback /home/patch/BandBuddyCapstone/Firmware/code/stage1/mock/mock_stage3_sharedmemread.cpp /home/patch/BandBuddyCapstone/Firmware/code/common/shared_mem.cpp
+g++ -g -I /home/patch/BandBuddyCapstone/Firmware/code/common -o cleanup /home/patch/BandBuddyCapstone/Firmware/code/stage1/mock/close_sharedmem.cpp /home/patch/BandBuddyCapstone/Firmware/code/common/shared_mem.cpp
