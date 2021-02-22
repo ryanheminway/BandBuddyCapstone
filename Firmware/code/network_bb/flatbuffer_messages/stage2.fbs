@@ -1,8 +1,0 @@
-namespace Server.Stage2;
-
-table Stage2{
-    ready:ubyte = 0;
-    midi_data_sz: uint32 = 0;
-}
-
-root_type Stage2;
