@@ -16,7 +16,7 @@
 """Base Music Variational Autoencoder (MusicVAE) model."""
 import abc
 
-from NANO_magenta_hparams import HParams
+from nano_magenta_hparams import HParams
 import tensorflow.compat.v1 as tf
 import tensorflow_probability as tfp
 import tensorflow
