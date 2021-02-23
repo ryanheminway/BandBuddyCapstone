@@ -248,3 +248,22 @@ int send_wav_shared_mem(int &socket_fd, uint32_t &size){
    return ret;
    
 }
+
+int send_webserver_data(int &socket_fd, uint8_t *webserver_data, int &size){
+    int ret = FAILED;
+    int cmd = WEBSERVER_REQUEST;
+    int destination = STAGE2;
+    int payload_size;
+    int stage_id = STAGE2;
+
+    payload_size = size;
+
+    ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+    if(ret == FAILED){
+        printf("Error while sending header\n");
+        return ret;
+    } 
+
+    ret = send_payload(socket_fd, webserver_data, payload_size);
+
+}

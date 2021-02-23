@@ -16,12 +16,12 @@
 """LSTM-based encoders and decoders for MusicVAE."""
 import abc
 
-import NANO_rnn as nano_rnn
-import NANO_seq2seq as contrib_seq2seq
-import NANO_base_model as base_model
-import NANO_lstm_utils as lstm_utils
-import NANO_configs as configs
-from NANO_common import flatten_maybe_padded_sequences
+import nano_rnn as nano_rnn
+import nano_seq2seq as contrib_seq2seq
+import nano_base_model as base_model
+import nano_lstm_utils as lstm_utils
+import nano_configs as configs
+from nano_common import flatten_maybe_padded_sequences
 import tensorflow.compat.v1 as tf
 import tensorflow_probability as tfp
 
@@ -152,9 +152,6 @@ class BaseLstmDecoder(base_model.BaseDecoder):
     """
     initial_state = lstm_utils.initial_cell_state_from_embedding(
         self._dec_cell, z, name='decoder/z_to_initial_state')
-
-    print("INITIAL STATE: ", initial_state)
-    print("INPUT SHAPE: ", input_shape)
 
     decoder = lstm_utils.Seq2SeqLstmDecoder(
         self._dec_cell,

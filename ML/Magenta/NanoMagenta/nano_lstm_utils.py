@@ -14,7 +14,7 @@
 """MusicVAE LSTM model utilities. Adjust to run on Jetson Nano"""
 import collections
 
-import NANO_seq2seq as contrib_seq2seq
+import nano_seq2seq as contrib_seq2seq
 import tensorflow.compat.v1 as tf
 import tensorflow
 
@@ -83,10 +83,6 @@ def set_final(sequence, sequence_length, values, time_major=False):
 def initial_cell_state_from_embedding(cell, z, name=None):
   """Computes an initial RNN `cell` state from an embedding, `z`."""
   flat_state_sizes = tf.nest.flatten(cell.state_size)
-
-  # (NOTE Ryan Heminway) Replaced the following line with "cell.get_initial_state....." in the return statement.
-  # cell.z_state(batch_size=z.shape[0], dtype=tf.float32),
-  # Necessary to account for change in cell definition (from contrib_rnn --> keras LSTMCell)
 
   return tf.nest.pack_sequence_as(
       cell.get_initial_state(batch_size=z.shape[0], dtype=tf.float32),

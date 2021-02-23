@@ -1,9 +1,9 @@
 import copy, librosa, numpy as np
-import NANO_configs as configs
-from NANO_trained_model import TrainedModel
+import nano_configs as configs
 import note_seq
 from note_seq import midi_synth
 from note_seq.protobuf import music_pb2
+
 
 # If a sequence has notes at time before 0.0, scoot them up to 0
 def start_notes_at_0(s):
@@ -12,6 +12,7 @@ def start_notes_at_0(s):
             n.end_time -= n.start_time
             n.start_time = 0
     return s
+
 
 # quickly change the tempo of a midi sequence and adjust all notes
 def change_tempo(note_sequence, new_tempo):
@@ -23,6 +24,8 @@ def change_tempo(note_sequence, new_tempo):
     new_sequence.tempos[0].qpm = new_tempo
     return new_sequence
 
+
+# Combines two tracks in to one
 def mix_tracks(y1, y2, stereo=False):
     l = max(len(y1), len(y2))
     y1 = librosa.util.fix_length(y1, l)
@@ -33,13 +36,15 @@ def mix_tracks(y1, y2, stereo=False):
     else:
         return y1 + y2
 
+
+# Apply GrooVAE model to input tapped sequence
 def drumify(s, model, temperature=1.0):
     encoding, mu, sigma = model.encode([s])
-    #print("ENCODED: ", len(encoding[0]))
     decoded = model.decode(encoding, length=32, temperature=temperature)
-    #print("DECODED: ", decoded)
     return decoded[0]
 
+
+# Combine an ordered list of sequences into one sequence
 def combine_sequences_with_lengths(sequences, lengths):
     seqs = copy.deepcopy(sequences)
     total_shift_amount = 0
@@ -71,15 +76,18 @@ def add_silent_note(note_sequence, num_bars):
         end_time=length - 0.01, is_drum=True)
 
 
+# Gets bar length in seconds based on input tempo
 def get_bar_length(note_sequence):
     tempo = note_sequence.tempos[0].qpm
     return 60 / tempo * 4
 
 
+# Does the sequence end earlier than a full bar?
 def sequence_is_shorter_than_full(note_sequence):
     return note_sequence.notes[-1].start_time < get_bar_length(note_sequence)
 
 
+# Get onset times, frames, and velocities from a wav file. Given a sampling rate.
 def get_rhythm_elements(y, sr):
     onset_env = librosa.onset.onset_strength(y, sr=sr)
     tempo = librosa.beat.tempo(onset_envelope=onset_env, max_tempo=180)[0]
@@ -92,6 +100,8 @@ def get_rhythm_elements(y, sr):
     return tempo, onset_times, onset_frames, onset_velocities
 
 
+# Given characteristics of a drum beat (onset times, frames, velocities, tempo), returns a NoteSequence
+# pattern which represents a "tapped" version of the input beat. "Tapped" meaning that each pulse is identical pitch.
 def make_tap_sequence(tempo, onset_times, onset_frames, onset_velocities,
                       velocity_threshold, start_time, end_time):
     note_sequence = music_pb2.NoteSequence()
@@ -107,8 +117,8 @@ def make_tap_sequence(tempo, onset_times, onset_frames, onset_velocities,
     return note_sequence
 
 
-# !!!!! TRANSLATE DIRECTLY FROM AUDIO TO DRUMS !!!!!
-def audio_to_drum(f, velocity_threshold=30, temperature=1., force_sync=False, start_windows_on_downbeat=False):
+# Given a .wav file path, applies the Drumify model to the input track and outputs a drum track.
+def audio_to_drum(f, velocity_threshold, temperature, model, force_sync=False, start_windows_on_downbeat=False):
     y, sr = librosa.load(f)
     # pad the beginning to avoid errors with onsets right at the start
     y = np.concatenate([np.zeros(1000), y])
@@ -146,6 +156,7 @@ def audio_to_drum(f, velocity_threshold=30, temperature=1., force_sync=False, st
         start_sample = int(librosa.core.time_to_samples(start_time, sr=sr))
         end_sample = int(librosa.core.time_to_samples(start_time + two_bar_length, sr=sr))
         current_section = y[start_sample:end_sample]
+        # Approximate tempo
         tempo = librosa.beat.tempo(onset_envelope=librosa.onset.onset_strength(current_section, sr=sr), max_tempo=180)[
             0]
 
@@ -194,7 +205,8 @@ def audio_to_drum(f, velocity_threshold=30, temperature=1., force_sync=False, st
             if start_windows_on_downbeat:
                 note_start_time = _shift_notes_to_beginning(s)
 
-            h = drumify(s, groovae_2bar_tap, temperature=temperature)
+            h = drumify(s, model, temperature=temperature)
+            # Adjust drum output to input tempo
             h = change_tempo(h, s.tempos[0].qpm)
 
             if start_windows_on_downbeat and note_start_time > 0.1:
@@ -211,6 +223,7 @@ def audio_to_drum(f, velocity_threshold=30, temperature=1., force_sync=False, st
         _sync_notes_with_onsets(combined_tap_sequence, onset_times)
         _sync_notes_with_onsets(combined_drum_sequence, onset_times)
 
+    # (TODO) Add additional SF2 soundpacks for variation so its not always default
     full_tap_audio = librosa.util.normalize(midi_synth.fluidsynth(combined_tap_sequence, sample_rate=sr))
     full_drum_audio = librosa.util.normalize(midi_synth.fluidsynth(combined_drum_sequence, sample_rate=sr))
 
@@ -218,44 +231,3 @@ def audio_to_drum(f, velocity_threshold=30, temperature=1., force_sync=False, st
     drums_and_original = mix_tracks(full_drum_audio, y[int(initial_start_time * sr):] / 2, stereo=True)
 
     return full_drum_audio, full_tap_audio, tap_and_onsets, drums_and_original, combined_drum_sequence
-
-"""
-NOTE Ryan Heminway
-Demonstrate interaction with GrooVAE (MusicVAE) model. Build model from saved checkpoint using Magenta's TrainedModel
-interface. Using TrainedModel interface, we interact with the model to perform inference and produce new drum files from
-an input of a wav file. 
-
-See drumify() function for interaction with TrainedModel. Calls to Encode and Decode
-"""
-
-# Load model checkpoint
-GROOVAE_2BAR_TAP_FIXED_VELOCITY = "../model_checkpoints/groovae_rock/groovae_rock.tar"
-print("PATH: ", GROOVAE_2BAR_TAP_FIXED_VELOCITY)
-config_2bar_tap = configs.CONFIG_MAP['groovae_2bar_tap_fixed_velocity']
-# Build GrooVAE model from checkpoint variables and config model definition
-groovae_2bar_tap = TrainedModel(config_2bar_tap, 1, checkpoint_dir_or_path=GROOVAE_2BAR_TAP_FIXED_VELOCITY)
-
-paths = ['../../Data/basic_plain.wav']
-temperature = 0.1
-velocity_threshold = 0.08
-stereo = False
-
-new_beats = []
-new_drum_audios = []
-combined_audios = []
-
-# Translate all input audio files to a new Drum track produced by TrainedModel
-# Can assume, for now, that process was successful if ALL DONE is printed in console
-#
-for i in range(len(paths)):
-    f = paths[i]
-    y,sr = librosa.load(f)
-    # "TRANSLATE" DIRECTLY FROM AUDIO TO NEW DRUM TRACK
-    full_drum_audio, full_tap_audio, tap_and_onsets, drums_and_original, combined_drum_sequence = audio_to_drum(f, velocity_threshold=velocity_threshold, temperature=temperature)
-    #print(full_tap_audio)
-    #write("my_test.wav", sr, full_drum_audio)
-    new_beats.append(combined_drum_sequence)
-    new_drum_audios.append(full_drum_audio)
-    combined_audios.append(drums_and_original)
-    print("DONE")
-print("ALL DONE")

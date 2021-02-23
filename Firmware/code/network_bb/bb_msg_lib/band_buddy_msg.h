@@ -1,3 +1,4 @@
+
 #ifndef BAND_BUDDY_MSG
 #define BAND_BUDDY_MSG 
 
@@ -17,6 +18,7 @@
 #define STAGE2_DATA_READY   (2)
 #define STAGE3_DATA_READY   (3)
 #define STAGE1_DATA         (4)
+#define WEBSERVER_REQUEST   (5)
 
 #pragma pack(push, 1)
 struct wave_header
@@ -38,5 +40,6 @@ int stage1_data_ready(int &socket_fd, int &size);
 int stage2_data_ready(int &socket_fd, int &size);
 int send_wav_file(int &socket_fd, struct wave_header &wav_hdr, int8_t *raw_data, int &size);
 int send_wav_shared_mem(int &socket_fd, uint32_t &size);
+int send_webserver_data(int &socket_fd, uint8_t *webserver_data, int &size);
 
 #endif //BAND_BUDDY_MSG

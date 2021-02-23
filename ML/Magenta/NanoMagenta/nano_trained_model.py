@@ -15,7 +15,7 @@
 # Lint as: python3
 """A class for sampling, encoding, and decoding from trained MusicVAE models.
 
-Adjust specifically to run on the Jetson Nano
+Adjusted specifically to run on the Jetson Nano. Removed all mention of Magenta library.
 """
 import copy
 import os
@@ -110,17 +110,6 @@ class TrainedModel(object):
         self._sigma = q_z.scale.diag
         self._z = q_z.sample()
 
-      var_map = None
-      # (Ryan Heminway): Commented out old version of variable mapping
-      """if var_name_substitutions is not None:
-        var_map = {}
-        for v in tf.global_variables():
-          var_name = v.name[:-2]  # Strip ':0' suffix.
-          for pattern, substitution in var_name_substitutions:
-            var_name = re.sub(pattern, substitution, var_name)
-          if var_name != v.name[:-2]:
-            tf.logging.info('Renaming `%s` to `%s`.', v.name[:-2], var_name)
-          var_map[var_name] = v"""
       if True:
         var_map = {}
         for v in tf.global_variables():
@@ -133,9 +122,10 @@ class TrainedModel(object):
             var_name = re.sub(r"stacked_rnn_cells_1/", "encoder/cell_0/bidirectional_rnn/bw/bw/while/stacked_rnn_cells_1/", var_name)
             if var_name != v.name[:-2]:
                 tf.logging.info('Renaming `%s` to `%s`.', v.name[:-2], var_name)
-                print('Renaming `%s` to `%s`.', v.name[:-2], var_name)
+                #print('Renaming `%s` to `%s`.', v.name[:-2], var_name)
             else:
-                print('NOT Renaming: ', var_name)
+                pass
+                #print('NOT Renaming: ', var_name)
             var_map[var_name] = v
 
       # Restore graph

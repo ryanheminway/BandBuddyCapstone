@@ -16,10 +16,11 @@
 """Configurations for MusicVAE models."""
 import collections
 
-from NANO_magenta_hparams import HParams
-import NANO_data as data
-import NANO_lstm_models as lstm_models
-from NANO_base_model import MusicVAE
+from nano_magenta_hparams import HParams
+import nano_data as data
+import nano_lstm_models as lstm_models
+from nano_base_model import MusicVAE
+
 
 def merge_hparams(hparams_1, hparams_2):
   """Merge hyperparameters from two tf.contrib.training.HParams objects.
@@ -39,6 +40,7 @@ def merge_hparams(hparams_1, hparams_2):
   hparams_map.update(hparams_2.values())
   return HParams(**hparams_map)
 
+
 class Config(collections.namedtuple(
     'Config',
     ['model', 'hparams', 'note_sequence_augmenter', 'data_converter',
@@ -46,6 +48,7 @@ class Config(collections.namedtuple(
 
   def values(self):
     return self._asdict()
+
 
 Config.__new__.__defaults__ = (None,) * len(Config._fields)
 
@@ -57,7 +60,6 @@ def update_config(config, update_dict):
 
 
 CONFIG_MAP = {}
-
 CONFIG_MAP['groovae_2bar_tap_fixed_velocity'] = Config(
     model=MusicVAE(lstm_models.BidirectionalLstmEncoder(),
                    lstm_models.GrooveLstmDecoder()),
