@@ -9,10 +9,12 @@ import Server.Header.Stages as stages
 FAILED = -1
 SUCCESS = 1
 
+
 def get_socket_descriptor(host, port):
     socket_fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     socket_fd.connect((host, port))
     return socket_fd
+
 
 def create_header(payload_size, destination, cmd, stage_id):
     builder = flatbuffers.Builder(0)
@@ -27,13 +29,15 @@ def create_header(payload_size, destination, cmd, stage_id):
     builder.Finish(header_msg)
 
     return builder.Output() 
-        
+
+
 def create_and_send_header(sck_fd, payload_size, destination, cmd, stage_id):
     ret = FAILED
     buf = create_header(payload_size, destination, cmd, stage_id)
     header_size = int(len(buf))
     sck_fd.sendall(header_size.to_bytes(4, byteorder="little"))
     sck_fd.sendall(buf)
+
 
 def connect_and_register(host, port):
     payload_size = 0
@@ -43,11 +47,12 @@ def connect_and_register(host, port):
 
     sfd = get_socket_descriptor(host, port)
     
-    if sfd != FAILED :
+    if sfd != FAILED:
         create_and_send_header(sfd, payload_size, destination, cmd, stage_id)
         return sfd
-    else : 
+    else:
         return FAILED
+
 
 def get_header_size():
     payload_size = 0
@@ -58,6 +63,7 @@ def get_header_size():
     buf = create_header(payload_size, destination, cmd, stage_id)
     return len(buf)
 
+
 def recv_msg(sock_fd, n):
     # Helper function to recv n bytes or return None if EOF is hit
     data = bytearray()
@@ -67,6 +73,7 @@ def recv_msg(sock_fd, n):
             return None
         data.extend(packet)
     return data
+
 
 def recv_header(sock_fd):
     header_size_array = recv_msg(sock_fd, 4)
@@ -79,12 +86,15 @@ def recv_header(sock_fd):
     #print('Wave data %s' %wav_data)
     return header_msg
 
+
 def get_payload(sock_fd, size):
     raw_data = recv_msg(sock_fd, size)
     return raw_data
 
-def send_payload(sock_fd, buf):
-    sock_fd.sendall(buf)
+
+def send_payload(sock_fd, data):
+    sock_fd.sendall(data)
+
 
 def send_midi_data(sock_fd, raw_data, size):
     payload_size = size
@@ -95,19 +105,21 @@ def send_midi_data(sock_fd, raw_data, size):
     create_and_send_header(sock_fd, payload_size, destination, this_cmd, stage_id)
     send_payload(sock_fd, raw_data)
 
+
 def recv_wav_msg(sock_fd):
     header_fbb = recv_header(sock_fd)
 
-    ##error checking 
-    if header_fbb.Destination() != stages.Stages().Stage2 and header_fbb.Cmd() != cmds.Cmds().Stage1_data :
+    # error checking
+    if header_fbb.Destination() != stages.Stages().Stage2 and header_fbb.Cmd() != cmds.Cmds().Stage1_data:
         return FAILED
-    else :
-        print("Payload size %d" %header_fbb.PayloadSize())
+    else:
+        print("Payload size %d" % header_fbb.PayloadSize())
         buf = get_payload(sock_fd, header_fbb.PayloadSize())
         return buf
 
 
-def test():
+# Unnecessary with stage2 module
+"""def test():
     header_len = get_header_size() 
     print(header_len)
     host = "127.0.0.1"
@@ -135,5 +147,5 @@ def test():
             sys.exit(0)
 
 if __name__ == "__main__":
-    test()
+    test()"""
     
