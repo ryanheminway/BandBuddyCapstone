@@ -12,11 +12,8 @@ def main():
     host = "127.0.0.1"
     port = 8080
 
-    # Connect to network backbone
-    socket_fd = network.connect_and_register(host, port)
-
     # Load model checkpoint
-    GROOVAE_2BAR_TAP_FIXED_VELOCITY = "../../model_checkpoints/groovae_rock/groovae_rock.tar"
+    GROOVAE_2BAR_TAP_FIXED_VELOCITY = "/home/bandbuddy/BandBuddyCapstone/ML/model_checkpoints/groovae_rock/groovae_rock.tar"
     config_2bar_tap = configs.CONFIG_MAP['groovae_2bar_tap_fixed_velocity']
     # Build GrooVAE model from checkpoint variables and config model definition
     groovae_2bar_tap = TrainedModel(config_2bar_tap, 1, checkpoint_dir_or_path=GROOVAE_2BAR_TAP_FIXED_VELOCITY)
@@ -24,6 +21,9 @@ def main():
     # (TODO) Need to experiment with these parameters. Also need to make them configurable via a network msg
     temperature = 0.8
     velocity_threshold = 0.08
+    
+    # Connect to network backbone
+    socket_fd = network.connect_and_register(host, port)
 
     while True:
         try:
