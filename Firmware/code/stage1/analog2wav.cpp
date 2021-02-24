@@ -601,7 +601,7 @@ int main(int argc, char* argv[])
         }
 
         // !TEMP
-        break;
+        fprintf(stdout, "Num bytes read: %d\n", num_bytes_read); 
     }
 
     // Cleanup
@@ -611,7 +611,5 @@ int main(int argc, char* argv[])
         close_networkbb_fd();
     }
     
-    // !TEMP
-    fprintf(stdout, "Num bytes read: %d\n", num_bytes_read);
     return err;
 }

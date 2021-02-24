@@ -22,7 +22,7 @@ int main(int argc, char** argv)
     int size = atoi(size_str);
 
     // Open the shared memory block 
-    uint8_t* shared_mem_blk = (uint8_t*)get_wav_mem_blk(size);
+    uint8_t* shared_mem_blk = (uint8_t*)get_midi_mem_blk(size);
     if (!shared_mem_blk)
     {
         fprintf(stderr, "Failed to open shared memory block!\n");
