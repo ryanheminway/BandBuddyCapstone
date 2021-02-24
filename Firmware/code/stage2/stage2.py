@@ -9,6 +9,7 @@ import io
 
 
 def main():
+    wav_file = "input_data.wav"
     host = "127.0.0.1"
     port = 8080
 
@@ -23,7 +24,7 @@ def main():
     velocity_threshold = 0.08
     
     # Connect to network backbone
-    socket_fd = network.connect_and_register(host, port)
+    socket_fd = network.connect_and_register(host, port, network.STAGE2)
 
     while True:
         try:
@@ -33,30 +34,41 @@ def main():
 
             if wav_data == None:
                 print("Could not get payload")
-
-            print("Got wav data: ", wav_data)
-
+            
             # Trying to convert raw wav bytearray to nparray
-            np_wav_data, sr = sf.read(io.BytesIO(wav_data))
-            print("Converted to np array: ", np_wav_data)
+            np_wav_data, sr = audio.read_wav_data(data=wav_data)
+            #print("Converted to np array: ", np_wav_data)
+            #print("Len of converted: ", len(np_wav_data))
+            #print("SR of converted: ", sr)
 
             print("Generating drum track...\n")
             # Apply trained model to input track. Only care about drum audio on return
-            #full_drum_audio, _, _, _, _ = audio.audio_to_drum(f, velocity_threshold=velocity_threshold,
-            #                                                  temperature=temperature, model=groovae_2bar_tap)
+            full_drum_audio, _, _, _, _ = audio.audio_to_drum(np_wav_data, sr, velocity_threshold=velocity_threshold,
+                                                              temperature=temperature, model=groovae_2bar_tap)
 
-            #print("Got generated drum track: ", full_drum_audio)
+            print("Got generated drum track: ", full_drum_audio)
+            
+            #print("Writing drum track to disk for good measure")
+            #sf.write("model_out_drums.wav", full_drum_audio, sr, subtype='PCM_24')
 
+            "
+            (TODO) May want to convert drum audio (currently NP array) back to a bytearray before sending.
+                Something like this should work. Havn't tested yet (ryan)
 
-            # send "midi data back to stage 3"
-            print("Sending midi data\n")
-            network.send_midi_data(socket_fd, wav_data, len(wav_data))
+            drum_bytes = bytes()
+            byte_io = io.BytesIO(drum_bytes)
+            sf.write(byte_io, full_drum_audio, sr, subtype='PCM_24')
+            drum_wav_bytes = byte_io.read()
+            "
+
+            # send wav data back to stage 3
+            print("Sending drum wav data\n")
+            network.send_midi_data(socket_fd, full_drum_audio, len(full_drum_audio))
 
         except KeyboardInterrupt:
             print("Shutting down stage2")
             socket_fd.close()
             sys.exit(0)
-
 
 if __name__ == "__main__":
     main()
