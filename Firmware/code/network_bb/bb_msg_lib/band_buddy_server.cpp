@@ -3,6 +3,7 @@
 #include "header_generated.h"
 #include "stage1_generated.h"
 #include "stage2_generated.h"
+#include "web_server_generated.h"
 #include "shared_mem.h"
 #include <iostream>
 #include <netdb.h> 
@@ -19,6 +20,7 @@
 using namespace Server::Header; 
 using namespace Server::Stage1;
 using namespace Server::Stage2;
+using namespace Server::WebServer;
 
 int retrieve_header(char *buffer, int sockfd) {
     int ret = FAILED;
@@ -153,6 +155,28 @@ int recieve_header_and_stage2_fbb(int &sockfd, uint32_t &midi_data_sz){
     ret = recieve_stage2_fbb(sockfd, payload_size, midi_data_sz);
 
     return ret;
+}
+
+int recieve_and_send_webserver_fbb(int &sock_fd, int &payload_size, int &destination_socket)
+{
+    int ret = FAILED;
+    uint8_t *buffer_ptr = NULL;
+
+    ret = retrieve_payload(sock_fd, payload_size, &buffer_ptr);
+
+    if (ret == FAILED)
+    {
+        return ret;
+    }
+
+    // don't need to do this. Debug only
+    auto webserver_fb = GetWebServer(buffer_ptr);
+
+    std::cout << "Genre = " << webserver_fb->genre() << std::endl;
+    
+    ret = send_webserver_data(destination_socket, buffer_ptr, payload_size);
+
+    return ret != FAILED ? SUCCESS : FAILED;
 }
 
 int recieve_and_mem_shared_stage2_data(int &sock_fd, int &payload_size){

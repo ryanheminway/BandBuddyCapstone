@@ -1,0 +1,7 @@
+namespace Server.WebServer;
+
+table WebServer{
+    genre: uint32 = 0;
+}
+
+root_type WebServer;

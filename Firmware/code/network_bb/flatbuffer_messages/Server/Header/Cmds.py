@@ -8,4 +8,5 @@ class Cmds(object):
     Stage2_data_ready = 2
     Stage3_data_ready = 3
     Stage1_data = 4
+    Web_server_data = 5
 

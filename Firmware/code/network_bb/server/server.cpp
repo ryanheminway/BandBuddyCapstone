@@ -22,7 +22,7 @@ The skeleton code can be found at https://www.geeksforgeeks.org/socket-programmi
 #define TRUE   1  
 #define FALSE  0  
 #define PORT   8080 
-#define MAX_CLIENTS 3
+#define MAX_CLIENTS 4
 #define MAX_BUFFER_SIZE 1024
      
 int main(int argc , char *argv[])   
@@ -207,6 +207,12 @@ int main(int argc , char *argv[])
                         case STAGE3_DATA_READY:
                             // TODO: stage3_data_ready function
                             std::cout << "Processing stage 2 data ready" << std::endl;
+                            break;
+
+                        case WEBSERVER_REQUEST:
+                            // TODO: webserver_request function
+                            std::cout << "Processing webserver_request ready" << std::endl;
+                            recieve_and_send_webserver_fbb(sd, payload_size, client_socket[destination]);
                             break;
                     }
                 }
