@@ -32,7 +32,7 @@ int retrieve_header(char *buffer, int sockfd) {
     ret = read(sockfd, &header_size, sizeof(header_size));
 
     if (header_size == 0){
-        std::cout << " Error while retrieving header size\n";
+        std::cout << " Error while retrieving header size BBBBBBBBBBB\n";
         return FAILED;
     }
     ret = read(sockfd, buffer, header_size);
@@ -40,7 +40,7 @@ int retrieve_header(char *buffer, int sockfd) {
     //std::cout << "Msg: " << buffer << std::endl;
     #endif
     if(ret <= 0) {
-        std::cout << "Error in receiving header" << std::endl;
+        std::cout << "Error in receiving header AAAAAAAAAAAA" << std::endl;
         return FAILED;
     }
 
@@ -72,30 +72,33 @@ int register_client(int *client_lst, int id, int sockfd) {
     return 0;
 }
 
-static int retrieve_payload(int &sock_fd, int &payload_size, uint8_t **raw_data){
+static int retrieve_payload(int &sock_fd, int &payload_size, uint8_t *raw_data){
     int ret = FAILED;
+    int bytes_recv = 0;
 
-    *(raw_data) = (uint8_t *)malloc(payload_size);
+	
+    while(bytes_recv < payload_size){
 
-    if(*(raw_data) == NULL){
-        return FAILED;
+	     bytes_recv += recv(sock_fd, raw_data + bytes_recv, payload_size - bytes_recv, MSG_WAITALL);
+
+	    std::cout << " ret = " << bytes_recv << std::endl;
     }
-
-    ret = read(sock_fd, *(raw_data), payload_size);
 
     if(ret < 0) {
         std::cout << "Error in recieving payload\n";
         return FAILED;
     }
 
-    return SUCCESS;
+    return ret;
 }
 
 int recieve_stage1_fbb(int &sock_fd, int &payload_sz, uint32_t &wave_data_sz){
     int ret = FAILED;
     uint8_t *buffer_ptr = NULL;
 
-    ret = retrieve_payload(sock_fd, payload_sz, &buffer_ptr);
+    buffer_ptr = (uint8_t *)malloc(payload_sz);
+
+    ret = retrieve_payload(sock_fd, payload_sz, buffer_ptr);
 
     if(ret == FAILED){
         return ret;
@@ -115,11 +118,14 @@ int recieve_stage2_fbb(int &sock_fd, int &payload_sz, uint32_t &midi_data_sz){
     int ret = FAILED;
     uint8_t *buffer_ptr = NULL;
 
-    ret = retrieve_payload(sock_fd, payload_sz, &buffer_ptr);
+    buffer_ptr = (uint8_t *)malloc(payload_sz);
+
+    ret = retrieve_payload(sock_fd, payload_sz, buffer_ptr);
 
     if(ret == FAILED){
         return ret;
     }
+    std::cout << "retrieve_payload bytes: " << ret << std::endl;
 
     auto stage2_fb = GetStage2(buffer_ptr);
     midi_data_sz = stage2_fb->midi_data_sz();
@@ -162,7 +168,9 @@ int recieve_and_send_webserver_fbb(int &sock_fd, int &payload_size, int &destina
     int ret = FAILED;
     uint8_t *buffer_ptr = NULL;
 
-    ret = retrieve_payload(sock_fd, payload_size, &buffer_ptr);
+    buffer_ptr = (uint8_t *)malloc(payload_size);
+
+    ret = retrieve_payload(sock_fd, payload_size, buffer_ptr);
 
     if (ret == FAILED)
     {
@@ -181,28 +189,26 @@ int recieve_and_send_webserver_fbb(int &sock_fd, int &payload_size, int &destina
 
 int recieve_and_mem_shared_stage2_data(int &sock_fd, int &payload_size){
     int ret = FAILED;
-    uint8_t *buffer_ptr = NULL;
     uint8_t *shared_mem_blk = NULL;
 
-    ret = retrieve_payload(sock_fd, payload_size, &buffer_ptr);
 
-    if(ret == FAILED){
-        return ret;
-    }
+    shared_mem_blk = (uint8_t *)get_midi_mem_blk(payload_size);
 
     //get shared_mem block and write it 
-    shared_mem_blk = (uint8_t *)get_midi_mem_blk(payload_size);
     if ( shared_mem_blk == NULL)
     {
         printf("Could not get memory block\n");
         return FAILED;
     }
 
-    //copy data
-    memcpy(shared_mem_blk, buffer_ptr, payload_size);
+    ret = retrieve_payload(sock_fd, payload_size, shared_mem_blk);
+
+    if(ret == FAILED){
+        return ret;
+    }
+
 
     detach_mem_blk(shared_mem_blk);
-    free(buffer_ptr);
 
     return ret;
 } 

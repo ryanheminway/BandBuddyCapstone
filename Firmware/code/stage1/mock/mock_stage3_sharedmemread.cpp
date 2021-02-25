@@ -30,7 +30,7 @@ int main(int argc, char** argv)
     }
 
     // Memcpy to a file 
-    FILE* file = fopen("zzz.wav", "w");
+    FILE* file = fopen("zzz.wav", "wb");
     if (!file) 
     {
         fprintf(stderr, "Could not open wav file!\n"); return 1;
