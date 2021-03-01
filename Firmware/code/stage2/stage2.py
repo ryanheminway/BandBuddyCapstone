@@ -1,4 +1,6 @@
 import sys
+import numpy as np
+from scipy.io.wavfile import read, write 
 sys.path.insert(0, '../../../ML/Magenta/NanoMagenta')
 import band_buddy_msg as network
 import nano_audio_utils as audio
@@ -9,8 +11,7 @@ import io
 
 
 def main():
-    wav_file = "input_data.wav"
-    host = "127.0.0.1"
+    host = "129.10.159.188"
     port = 8080
 
     # Load model checkpoint
@@ -47,23 +48,25 @@ def main():
                                                               temperature=temperature, model=groovae_2bar_tap)
 
             print("Got generated drum track: ", full_drum_audio)
+            #full_drum_audio = np.repeat(full_drum_audio, 2)
+            #print("Duplicated into stereo data")
             
             #print("Writing drum track to disk for good measure")
             #sf.write("model_out_drums.wav", full_drum_audio, sr, subtype='PCM_24')
 
-            "
-            (TODO) May want to convert drum audio (currently NP array) back to a bytearray before sending.
-                Something like this should work. Havn't tested yet (ryan)
+            #with open("model_out_drums.wav", 'rb') as f:
+            #    drum_bytes = f.read()
 
             drum_bytes = bytes()
             byte_io = io.BytesIO(drum_bytes)
-            sf.write(byte_io, full_drum_audio, sr, subtype='PCM_24')
-            drum_wav_bytes = byte_io.read()
-            "
+            write(byte_io, sr, (full_drum_audio * 32767).astype(np.int16))
+            output_drum_wav = byte_io.read()
+            #print("SENDING DATA: ", output_drum_wav)
+            print("SENDING LEN: ", len(output_drum_wav))
 
             # send wav data back to stage 3
             print("Sending drum wav data\n")
-            network.send_midi_data(socket_fd, full_drum_audio, len(full_drum_audio))
+            network.send_midi_data(socket_fd, output_drum_wav, len(output_drum_wav))
 
         except KeyboardInterrupt:
             print("Shutting down stage2")
