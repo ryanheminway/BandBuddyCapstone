@@ -26,8 +26,11 @@ combined_audios = []
 for i in range(len(paths)):
     f = paths[i]
     y,sr = librosa.load(f)
+    print("Loaded wav data: ", y)
+    print("Length of wav data: ", len(y))
+    print("Loaded SR: ", sr)
     # "TRANSLATE" DIRECTLY FROM AUDIO TO NEW DRUM TRACK
-    full_drum_audio, _, tap_and_onsets, drums_and_original, _ = audio.audio_to_drum(f,
+    full_drum_audio, _, tap_and_onsets, drums_and_original, _ = audio.audio_to_drum(y, sr,
                                                                                     velocity_threshold=velocity_threshold,
                                                                                     temperature=temperature,
                                                                                     model=groovae_2bar_tap)
