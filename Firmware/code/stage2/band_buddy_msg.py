@@ -57,7 +57,8 @@ def create_and_send_header(sck_fd, payload_size, destination, cmd, stage_id):
     buf = create_header(payload_size, destination, cmd, stage_id)
     header_size = int(len(buf))
     sck_fd.sendall(header_size.to_bytes(4, byteorder="little"))
-    sck_fd.sendall(buf)
+    print("header size: ", header_size)
+    print("sent from sendall: ", sck_fd.sendall(buf))
 
 def connect_and_register(host, port, stage_id):
     payload_size = 0
@@ -203,8 +204,24 @@ def test_webserver():
    print("Recieved genre = %d" %webserver_fbb.Genre())
 
 
+def test_large_data():
+    host = "129.10.159.188" 
+    port = 8080 
 
+    f = open("model_out_drums.wav", "rb")
+    f_test = open("model_out_test.wav", "wb")
+    socket_fd = connect_and_register(host, port, STAGE2)
 
+    wav_data = f.read()
+
+    print(wav_data[0x5d0:0x5e0])
+
+    f_test.write(wav_data)
+
+    send_midi_data(socket_fd, wav_data, len(wav_data))
+
+    f.close()
+    f_test.close()
 if __name__ == "__main__":
-    test_webserver()
+    test_large_data()
     
