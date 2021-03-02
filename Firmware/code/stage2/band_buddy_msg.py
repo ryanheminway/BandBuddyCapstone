@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/brick/bandbuddy/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
+sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
 import socket
 import flatbuffers
 import Server.Header.Cmds as cmds 
@@ -195,9 +195,9 @@ def test_webserver():
    host = "127.0.0.1"
    port = 8080 
 
-   socket_fd = connect_and_register(host, port, WEB_SERVER_STAGE)
+   socket_fd = connect_and_register(host, port, STAGE2)
 
-   send_webserver_data(socket_fd, 45, STAGE2)
+   #send_webserver_data(socket_fd, 45, STAGE2)
 
    webserver_fbb = recv_webserver_fbb(socket_fd)
 
@@ -223,5 +223,5 @@ def test_large_data():
     f.close()
     f_test.close()
 if __name__ == "__main__":
-    test_large_data()
+    test_webserver()
     

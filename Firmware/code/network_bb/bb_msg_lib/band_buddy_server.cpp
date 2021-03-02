@@ -66,14 +66,13 @@ int register_client(int *client_lst, int id, int sockfd) {
     if(client_lst[id]) {
         // For sanity check
         std::cout << "Client already exists" << std::endl;
-        return -1;
+       return -1;
     }
     client_lst[id] = sockfd;
     return 0;
 }
 
 static int retrieve_payload(int &sock_fd, int &payload_size, uint8_t *raw_data){
-    int ret = FAILED;
     int bytes_recv = 0;
 
 	
@@ -84,12 +83,12 @@ static int retrieve_payload(int &sock_fd, int &payload_size, uint8_t *raw_data){
 	    std::cout << " ret = " << bytes_recv << std::endl;
     }
 
-    if(ret < 0) {
+    if(bytes_recv < payload_size) {
         std::cout << "Error in recieving payload\n";
         return FAILED;
     }
 
-    return ret;
+    return SUCCESS;
 }
 
 int recieve_stage1_fbb(int &sock_fd, int &payload_sz, uint32_t &wave_data_sz){

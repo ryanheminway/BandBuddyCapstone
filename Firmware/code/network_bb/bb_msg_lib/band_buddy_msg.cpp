@@ -107,11 +107,9 @@ static int register_stage(int &socket_fd, int &stage_id){
 
 int connect_and_register(int &stage_id, int &socket_fd){
     int ret = FAILED;
-
     //connect to server to get socket descriptor
     socket_fd = get_socket_discriptor();
     ret = register_stage(socket_fd, stage_id);
-
     return ret; 
 
 }
