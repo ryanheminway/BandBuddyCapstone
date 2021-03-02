@@ -15,6 +15,7 @@
 int main(int argc, char** argv)
 {
     bool success = destroy_wav_mem_blk();
+    success &= destroy_midi_mem_blk();
     if (!success)
     {
         fprintf(stdout, "Failed to destroy!\n");

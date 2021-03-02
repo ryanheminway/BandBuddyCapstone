@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '../network_bb/flatbuffer_messages')
+sys.path.insert(0, '/home/brick/bandbuddy/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
 import socket
 import flatbuffers
 import Server.Header.Cmds as cmds 
@@ -178,10 +178,13 @@ def test():
             if wav_data == None:
                 print("Could not get payload")
 
-            print(wav_data)
+            # print(wav_data) 
             ##send "midi data back to stage 3"
-            print("Sendind midi data\n")
-            send_midi_data(socket_fd, wav_data, len(wav_data))
+            print("Sending ***MOCK MIDI DATA*** data\n")
+            with open("/home/patch/BandBuddyCapstone/Firmware/code/stage2/mock/hcb_drums.wav", mode="rb") as wav:
+                raw_data = wav.read()
+                print(f"MIDI data length: {len(raw_data)}")
+                send_midi_data(socket_fd, raw_data, len(raw_data))
 
         except KeyboardInterrupt:
             print("Shutting down stage2")
