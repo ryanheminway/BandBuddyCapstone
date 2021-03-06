@@ -65,14 +65,15 @@ static int networkbb_fd;
 void start_recording()
 {
     // Acquire the mutex and await the condition variable
-    std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
+    //std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
     is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
+    is_button_pressed_cv.notify_one();
 }
 void stop_recording()
 {
 
     // Acquire the mutex and await the condition variable
-    std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
+    //std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
     is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
 }
 
@@ -84,8 +85,6 @@ void await_button_press()
     // Lambda prevents spurious wakeups
     is_button_pressed_cv.wait(lock, [&]() { return is_button_pressed.load(std::memory_order::memory_order_seq_cst); });
 
-    // Reset the button status to unpressed
-    is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
 }
 
 void *wait_button_pressed(void *thread_args)
@@ -110,6 +109,7 @@ void *wait_button_pressed(void *thread_args)
         {
         case START:
             start_recording();
+            send_ack(networkbb_fd, this_destination, this_stage_id);
             break;
         case STOP:
             stop_recording();
@@ -646,10 +646,13 @@ int main(int argc, char *argv[])
 
     while (1)
     {
-        if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
-        {
+
+        //TODO: get rid off the if and use the call back again
+        //if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
+        //{
             // Reset the button press status
             //is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
+            await_button_press();
 
             // Init the capture handle
             err = init_capture_handle();
@@ -687,7 +690,7 @@ int main(int argc, char *argv[])
 
             // !TEMP
             fprintf(stdout, "Num bytes read: %d\n", num_bytes_read);
-        }
+        //}
     }
 
     // Cleanup

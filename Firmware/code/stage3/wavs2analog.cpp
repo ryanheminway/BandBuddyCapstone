@@ -57,7 +57,7 @@ static int networkbb_fd;
 void stop_recording()
 {
     // Acquire the mutex and await the condition variable
-    std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
+    //std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
     is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
 }
 
