@@ -211,3 +211,32 @@ int recieve_and_mem_shared_stage2_data(int &sock_fd, int &payload_size){
 
     return ret;
 } 
+
+int recieve_ack(int &sock_fd, int &stage_id){
+
+    int ret = FAILED;
+    int destination; 
+    int cmd; 
+    int payload_size;
+    int thi_stage_id; //do not really care where it came from
+
+    char buffer[1024];
+    ret = retrieve_header(buffer, sock_fd);
+    parse_header(buffer, destination, cmd, thi_stage_id, payload_size);
+
+    if(cmd != ACK || destination != stage_id || ret == FAILED){
+        std::cout << " Could not processed ACK\n";
+        return FAILED;
+    }
+
+    return SUCCESS;
+}
+
+
+int recieve_through_message(int &sock_fd, uint8_t *buff, int &payload_size){
+   int ret = FAILED; 
+
+   ret = retrieve_payload(sock_fd, payload_size, buff);
+
+   return ret;
+}

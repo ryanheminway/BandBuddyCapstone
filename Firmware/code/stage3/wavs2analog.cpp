@@ -5,6 +5,8 @@
 #include <atomic>
 #include <condition_variable>
 #include <signal.h>
+#include <pthread.h>
+#include <iostream>
 
 #include "shared_mem.h"
 #include "band_buddy_server.h"
@@ -52,14 +54,48 @@ std::mutex is_button_pressed_mutex;
 static int networkbb_fd;
 
 
+void stop_recording()
+{
+    // Acquire the mutex and await the condition variable
+    std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
+    is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
+}
+
+void *wait_button_pressed(void *thread_args)
+{
+    #warning "Clean up wait_button_pressed function\n"
+    int cmd; 
+    int destination;
+    int stage_id;
+    int payload_size;
+    char buffer[1024];
+
+    int this_stage_id = STAGE3;
+    int this_destination = BIG_BROTHER;
+
+    while(1){
+
+        retrieve_header(buffer, networkbb_fd);
+        parse_header(buffer, destination, cmd, stage_id, payload_size);
+        switch(cmd){
+            case STOP:
+                stop_recording();
+                send_ack(networkbb_fd, this_destination, this_stage_id);
+                break;
+            default:
+                std::cout << " Sorrry kid wrong command\n";
+                break;
+        }
+    }
+}
 // Button press handler
-void button_pressed(int sig)
+/*void button_pressed(int sig)
 {
     // Ignore button presses that occur before audio is playing - these are for Stage 1
     if (is_audio_playing.load(std::memory_order::memory_order_relaxed)) {
         is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
     }
-}
+}*/
 
 // Print an error and its snd string message to stderr.
 void print_error(int err, const char* message, ...)
@@ -356,7 +392,7 @@ static int loop_audio_until_cancelled(int loop_size)
     }
 
     // Mark that audio is playing 
-    is_audio_playing.store(true, std::memory_order::memory_order_seq_cst);
+    //is_audio_playing.store(true, std::memory_order::memory_order_seq_cst);
 
     // Loop until the button is pressed
     while ((err = play_loop(loop_size)) == 0);
@@ -365,7 +401,7 @@ static int loop_audio_until_cancelled(int loop_size)
     if (err == 1) err = 0;
 
     // Mark that audio is no longer playing 
-    is_audio_playing.store(false, std::memory_order::memory_order_seq_cst);
+    //is_audio_playing.store(false, std::memory_order::memory_order_seq_cst);
 
     return err | close_playback_handle();
 }
@@ -381,15 +417,25 @@ int delete_shared_memory(void* mem)
 int main(int argc, char** argv)
 {
     // Register button press signal handler
-    signal(SIGINT, button_pressed);
+    //signal(SIGINT, button_pressed);
+    pthread_t thread;
+    int err;
 
     // Connect to the network backbone 
     int failed = FAILED;
-    int what =connect_networkbb(); 
+    int what = connect_networkbb(); 
     if (what == failed)
     {
         fprintf(stderr, "%s\n", "Could not connect to the network backbone!");
         return 1;
+    }
+
+    err = pthread_create(&thread, NULL, wait_button_pressed, NULL);
+
+    if (err)
+    {
+        std::cout << "Error:unable to create thread," << err << std::endl;
+        exit(-1);
     }
 
     // This will change as it is integrated with the network backbone
@@ -431,7 +477,7 @@ int main(int argc, char** argv)
         }
 
         // Loop the audio until told not to (!TODO ???)
-        int err;
+        
         if ((err = loop_audio_until_cancelled(midi_size)))
         {
             fprintf(stderr, "loop audio returned %d!\n", err);

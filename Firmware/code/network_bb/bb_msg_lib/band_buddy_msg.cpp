@@ -1,4 +1,5 @@
 #include "band_buddy_msg.h"
+#include "band_buddy_server.h"
 #include "header_generated.h"
 #include "stage1_generated.h"
 #include "stage2_generated.h"
@@ -122,10 +123,9 @@ static int send_payload(int &socket_fd, unsigned char *data, int size){
 
 }
 
-int stage1_data_ready(int &socket_fd, int &size){
+int stage1_data_ready(int &socket_fd, int &destination, int &size){
     int ret = FAILED;
     int cmd = STAGE1_DATA_READY;
-    int destination = STAGE2;
     int payload_size; 
     int stage_id = STAGE1;
     int data_ready = 1;
@@ -264,4 +264,43 @@ int send_webserver_data(int &socket_fd, uint8_t *webserver_data, int &size){
 
     ret = send_payload(socket_fd, webserver_data, payload_size);
 
+}
+
+int send_ack(int &socket_fd, int &destination, int &stage_id){
+    int ret = FAILED;
+    int cmd = ACK;
+    int payload_size = 0;
+
+    ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+    if(ret == FAILED){
+        printf("Error while sending header\n");
+        return ret;
+    } 
+
+    return ret;
+}
+
+
+int send_through_message(int &socket_fd, int &destination, int &cmd, int &stage_id, int &payload_size, int &dst_sock){
+
+    int ret = FAILED;
+    
+    if(payload_size == 0){
+        ret = create_and_send_header(dst_sock, payload_size, destination, cmd, stage_id);
+    } else {
+        uint8_t *buff = (uint8_t *)malloc(payload_size);
+
+        ret = recieve_through_message(socket_fd, buff, payload_size);
+        if(ret == FAILED){
+            return FAILED;
+        }
+
+        create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+        ret = send_payload(dst_sock, buff, payload_size);
+
+        return ret;
+    }
+
+
+    return ret;
 }

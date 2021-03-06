@@ -21,6 +21,7 @@ int main()
 {
     // Get mock music file size 
     int size;
+    int destination = BACKBONE_SERVER;
     struct stat st;
     if (stat(DUMMY_FILE, &st) != 0)
     {
@@ -57,7 +58,7 @@ int main()
 	   fprintf(stderr, "%s\n", "agh"); return 1;
     }
 
-    if (stage1_data_ready(bb_fd, size) != SUCCESS)
+    if (stage1_data_ready(bb_fd, size, destination) != SUCCESS)
     {
 	    fprintf(stderr, "%s\n", "ghafdh"); return 1;
     }
