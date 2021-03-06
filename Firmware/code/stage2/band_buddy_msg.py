@@ -13,6 +13,7 @@ STAGE3 = stages.Stages().Stage3
 WEB_SERVER_STAGE = stages.Stages().WebServer
 
 REGISTER = cmds.Cmds().Register
+STAGE1_DATA = cmds.Cmds().Stage1_data
 STAGE2_DATA_READY = cmds.Cmds().Stage2_data_ready
 WEBSERVER_DATA = cmds.Cmds().Web_server_data
 
@@ -56,9 +57,10 @@ def create_and_send_header(sck_fd, payload_size, destination, cmd, stage_id):
     ret = FAILED
     buf = create_header(payload_size, destination, cmd, stage_id)
     header_size = int(len(buf))
-    sck_fd.sendall(header_size.to_bytes(4, byteorder="little"))
+    ret = sck_fd.sendall(header_size.to_bytes(4, byteorder="little"))
     print("header size: ", header_size)
     print("sent from sendall: ", sck_fd.sendall(buf))
+    return ret == None ? SUCCESS : FAILED
 
 def connect_and_register(host, port, stage_id):
     payload_size = 0
@@ -113,32 +115,37 @@ def get_payload(sock_fd, size):
 
 
 def send_payload(sock_fd, data):
-    sock_fd.sendall(data)
+    ret = FAILED
+    ret = sock_fd.sendall(data)
+    return ret == None ? SUCCESS : FAILED
 
 
-def send_midi_data(sock_fd, raw_data, size):
-    payload_size = size
-    destination = stages.Stages().Stage3
+def send_midi_data(sock_fd, raw_data, destination):
+    ret = FAILED
+    # payload_size = size
+    # destination = stages.Stages().Stage3
     this_cmd = cmds.Cmds().Stage2_data_ready
     stage_id = stages.Stages().Stage2
+    payload_size = len(raw_data)
 
-    create_and_send_header(sock_fd, payload_size, destination, this_cmd, stage_id)
-    send_payload(sock_fd, raw_data)
+    ret = create_and_send_header(sock_fd, payload_size, destination, this_cmd, stage_id)
+    ret = send_payload(sock_fd, raw_data)
+    return ret
 
 def send_webserver_data(sock_fd, genre, destination):
-
+    ret = FAILED
     webserver_fbb = create_webserver_fbb(genre)
     payload_size = len(webserver_fbb)
     this_cmd = WEBSERVER_DATA 
     stage_id = STAGE2
 
-    create_and_send_header(sock_fd, payload_size, destination, this_cmd, stage_id)
-    send_payload(sock_fd, webserver_fbb)
+    ret = create_and_send_header(sock_fd, payload_size, destination, this_cmd, stage_id)
+    ret = send_payload(sock_fd, webserver_fbb)
+    return ret
 
 
-
-def recv_wav_msg(sock_fd):
-    header_fbb = recv_header(sock_fd)
+def recv_wav_msg(sock_fd, header_fbb):
+    # header_fbb = recv_header(sock_fd)
 
     # error checking
     if header_fbb.Destination() != stages.Stages().Stage2 and header_fbb.Cmd() != cmds.Cmds().Stage1_data:
@@ -148,7 +155,7 @@ def recv_wav_msg(sock_fd):
         buf = get_payload(sock_fd, header_fbb.PayloadSize())
         return buf
 
-def recv_webserver_fbb(sock_fd):
+def recv_webserver_fbb(sock_fd, header_fbb):
     header_fbb = recv_header(sock_fd)
 
     ##error checking 
@@ -158,7 +165,28 @@ def recv_webserver_fbb(sock_fd):
         print("Payload size %d" %header_fbb.PayloadSize())
         buf = get_payload(sock_fd, header_fbb.PayloadSize())
         webserver_fbb = webserver.WebServer.GetRootAs(buf, 0)
-        return webserver_fbb 
+        return webserver_fbb
+
+
+def send_msg(sock_fd, data1, destination, cmd):
+    ret = FAILED
+    if cmd == WEBSERVER_DATA:
+        ret = send_webserver_data(sock_fd, data1, destination)
+    else if cmd == STAGE2_DATA_READY:
+        ret = send_midi_data(sock_fd, data1, destination)
+    return ret
+
+def recv_msg(sock_fd):
+    header_fbb = recv_header(sock_fd)
+    buf = ''
+
+    if header_fbb.Cmd() == cmds.Cmds().Stage1_data:
+        buf = recv_wav_msg(sock_fd, header_fbb)
+    else if header_fbb.Cmd() == cmds.Cmds().Web_server_data:
+        buf = recv_webserver_fbb(sock_fd, header_fbb)
+
+    return header_fbb.Cmd(), buf
+
 
 # Unnecessary with stage2 module
 def test():
