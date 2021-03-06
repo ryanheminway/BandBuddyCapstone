@@ -1,6 +1,5 @@
 #include <signal.h>
 #include <iostream>
-#include "big_brother_state_machine.h"
 #include <condition_variable>
 #include <atomic>
 #include <mutex>
@@ -8,6 +7,7 @@
 
 #include "band_buddy_msg.h"
 #include "band_buddy_server.h"
+#include "big_brother_state_machine.h"
 
 // Mutex for button presses.
 std::mutex button_press_mutex;
@@ -45,11 +45,11 @@ int await_stage_ack()
 {
     int stage = BIG_BROTHER;
     int ret = FAILED;
-    if ((ret = recieve_ack(networkbb_fd, stage)) == FAILED)
-    {
-        std::cerr << "Receiving stage ACK from network backbone failed!" << '\n';
-        exit(1);
-    }
+    // if ((ret = recieve_ack(networkbb_fd, stage)) == FAILED)
+    // {
+    //     std::cerr << "Receiving stage ACK from network backbone failed!" << '\n';
+    //     exit(1);
+    // }
 
     return ret;
 }
@@ -61,7 +61,7 @@ void callback_init(BigBrotherStateMachine::State)
 
     // Start Stage 1 recording
     int stage = BIG_BROTHER;
-    stage1_start(networkbb_fd, stage);
+    //stage1_start(networkbb_fd, stage);
     
     // Wait for Stage 1 ACK
     await_stage_ack();
@@ -74,7 +74,7 @@ void callback_stage_1(BigBrotherStateMachine::State)
 
     // Stop Stage 1 recording
     int stage = BIG_BROTHER;
-    stage1_stop(networkbb_fd, stage);
+    //stage1_stop(networkbb_fd, stage);
 
     // Wait for Stage 1 ACK
     await_stage_ack();
@@ -99,7 +99,7 @@ void callback_stage_3(BigBrotherStateMachine::State)
 
     // Stop Stage 3 playback 
     int stage = BIG_BROTHER;
-    stage3_stop(networkbb_fd, stage);
+    //stage3_stop(networkbb_fd, stage);
 
     // Wait for Stage 3 ACK
     await_stage_ack();
@@ -116,11 +116,11 @@ int main(int, char*[])
 
     // Register with the bb
     int stage = BIG_BROTHER;
-    if (connect_and_register(stage, networkbb_fd) != SUCCESS)
-    {
-        std::cerr << "Could not connect and register with the network backbone!" << '\n';
-        return 1;
-    }
+    // if (connect_and_register(stage, networkbb_fd) != SUCCESS)
+    // {
+    //     std::cerr << "Could not connect and register with the network backbone!" << '\n';
+    //     return 1;
+    // }
 
     signal(SIGINT, button_pressed);
 

@@ -1,8 +1,6 @@
 #ifndef SHARED_MEM
 #define SHARED_MEM
 
-#include <stdbool.h>
-
 #define BLK_SIZE 4096   //word align 
 
 constexpr const char* WAV_DATA_KEY = "/home/patch/BandBuddyCapstone/Firmware/code/common/lib/shared_wav.txt";  
