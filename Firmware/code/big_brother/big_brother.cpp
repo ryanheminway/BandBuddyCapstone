@@ -4,40 +4,88 @@
 #include <condition_variable>
 #include <atomic>
 #include <mutex>
+#include <thread>
 
+// Mutex for button presses.
 std::mutex button_press_mutex;
+// Condition variable for button presses.
 std::condition_variable button_press_cv;
+// Spurious wakeup guard for button presses.
 std::atomic_bool is_button_pressed;
 
+// The state machine that backs Big Brother.
 BigBrotherStateMachine state_machine;
 
+// Button pressed triggers on SIGINT
 void button_pressed(int) 
 {
     is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
     button_press_cv.notify_all();
 }
 
+// Should be run asynchronously - awaits a Stage 2 complete message from the network backbone
+void await_stage2_done()
+{
+    // ??? 
+    #warning "*** NETWORK CODE HERE ***"
+    
+    // !TEMP
+    std::cout << "Stage 2 complete!" << '\n';
+    state_machine.stage2_complete();
+}
+
+
+void await_stage_ack(/*Do I need stage info here?*/)
+{
+    #warning "*** NETWORK CODE HERE ***"
+}
+
+// State INIT callback.
 void callback_init(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: INIT" << '\n';
+
+    // Start Stage 1 recording
+    #warning "*** NETWORK CODE HERE ***"
+    
+    // Wait for Stage 1 ACK
+    await_stage_ack(/*State::STAGE_1?*/);
 }
 
+// State STAGE_1 callback.
 void callback_stage_1(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: STAGE_1" << '\n';
 
-    // !TEMP
-    state_machine.stage2_complete();
+    // Stop Stage 1 recording
+    #warning "*** NETWORK CODE HERE ***"
+
+    // Wait for Stage 1 ACK
+    await_stage_ack(/*State::STAGE_1?*/);
+
+    // Asynchronously wait for Stage 2 to complete 
+    auto stage2_thread = std::thread(await_stage2_done);
+    stage2_thread.detach();
 }
 
+// State STAGE_2 callback.
 void callback_stage_2(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: STAGE_2" << '\n';
+
+    // Ignore button presses for Stage 2
 }
 
+// State STAGE_3 callback.
 void callback_stage_3(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: STAGE_3" << '\n';
+
+    // Stop Stage 3 playback 
+    #warning "*** NETWORK CODE HERE ***"
+
+    // Wait for Stage 3 ACK
+    await_stage_ack(/*State::STAGE_3?*/);
 }
 
 
@@ -51,12 +99,17 @@ int main(int, char*[])
 
     signal(SIGINT, button_pressed);
 
+
     while (1)
     {
+        // Await a button press
         auto lock = std::unique_lock<std::mutex>(button_press_mutex);
         button_press_cv.wait(lock, [&](){ return is_button_pressed.load(std::memory_order_seq_cst); });
 
+        // Ask the state machine what to do 
         state_machine.button_pressed();
+
+        // Reset the spurious wakeup guard
         is_button_pressed.store(false, std::memory_order_seq_cst);
     }
 
