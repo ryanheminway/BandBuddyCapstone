@@ -6,6 +6,9 @@
 #include <mutex>
 #include <thread>
 
+#include "band_buddy_msg.h"
+#include "band_buddy_server.h"
+
 // Mutex for button presses.
 std::mutex button_press_mutex;
 // Condition variable for button presses.
@@ -15,6 +18,9 @@ std::atomic_bool is_button_pressed;
 
 // The state machine that backs Big Brother.
 BigBrotherStateMachine state_machine;
+
+// Network backbone file descriptor
+int networkbb_fd;
 
 // Button pressed triggers on SIGINT
 void button_pressed(int) 
@@ -27,7 +33,7 @@ void button_pressed(int)
 void await_stage2_done()
 {
     // ??? 
-    #warning "*** NETWORK CODE HERE ***"
+    #warning "*** Receive stage2 data ready message required in server/msg.cpp ***"
     
     // !TEMP
     std::cout << "Stage 2 complete!" << '\n';
@@ -35,9 +41,17 @@ void await_stage2_done()
 }
 
 
-void await_stage_ack(/*Do I need stage info here?*/)
+int await_stage_ack()
 {
-    #warning "*** NETWORK CODE HERE ***"
+    int stage = BIG_BROTHER;
+    int ret = FAILED;
+    if ((ret = recieve_ack(networkbb_fd, stage)) == FAILED)
+    {
+        std::cerr << "Receiving stage ACK from network backbone failed!" << '\n';
+        exit(1);
+    }
+
+    return ret;
 }
 
 // State INIT callback.
@@ -46,10 +60,11 @@ void callback_init(BigBrotherStateMachine::State)
     std::cout << "Callback: INIT" << '\n';
 
     // Start Stage 1 recording
-    #warning "*** NETWORK CODE HERE ***"
+    int stage = BIG_BROTHER;
+    stage1_start(networkbb_fd, stage);
     
     // Wait for Stage 1 ACK
-    await_stage_ack(/*State::STAGE_1?*/);
+    await_stage_ack();
 }
 
 // State STAGE_1 callback.
@@ -58,10 +73,11 @@ void callback_stage_1(BigBrotherStateMachine::State)
     std::cout << "Callback: STAGE_1" << '\n';
 
     // Stop Stage 1 recording
-    #warning "*** NETWORK CODE HERE ***"
+    int stage = BIG_BROTHER;
+    stage1_stop(networkbb_fd, stage);
 
     // Wait for Stage 1 ACK
-    await_stage_ack(/*State::STAGE_1?*/);
+    await_stage_ack();
 
     // Asynchronously wait for Stage 2 to complete 
     auto stage2_thread = std::thread(await_stage2_done);
@@ -82,10 +98,11 @@ void callback_stage_3(BigBrotherStateMachine::State)
     std::cout << "Callback: STAGE_3" << '\n';
 
     // Stop Stage 3 playback 
-    #warning "*** NETWORK CODE HERE ***"
+    int stage = BIG_BROTHER;
+    stage3_stop(networkbb_fd, stage);
 
     // Wait for Stage 3 ACK
-    await_stage_ack(/*State::STAGE_3?*/);
+    await_stage_ack();
 }
 
 
@@ -96,6 +113,14 @@ int main(int, char*[])
     state_machine.register_callback(BigBrotherStateMachine::State::STAGE_1, callback_stage_1);
     state_machine.register_callback(BigBrotherStateMachine::State::STAGE_2, callback_stage_2);
     state_machine.register_callback(BigBrotherStateMachine::State::STAGE_3, callback_stage_3);
+
+    // Register with the bb
+    int stage = BIG_BROTHER;
+    if (connect_and_register(stage, networkbb_fd) != SUCCESS)
+    {
+        std::cerr << "Could not connect and register with the network backbone!" << '\n';
+        return 1;
+    }
 
     signal(SIGINT, button_pressed);
 

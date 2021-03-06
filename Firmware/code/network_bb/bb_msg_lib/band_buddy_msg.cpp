@@ -264,6 +264,7 @@ int send_webserver_data(int &socket_fd, uint8_t *webserver_data, int &size){
 
     ret = send_payload(socket_fd, webserver_data, payload_size);
 
+    return ret;
 }
 
 int send_ack(int &socket_fd, int &destination, int &stage_id){
@@ -301,6 +302,37 @@ int send_through_message(int &socket_fd, int &destination, int &cmd, int &stage_
         return ret;
     }
 
+
+    return ret;
+}
+
+
+int stage1_start(int &socket_fd, int& stage_id)
+{
+    int ret = FAILED;
+    
+    int payload_size = 0, cmd = START, destination = STAGE1;
+    ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+
+    return ret;
+}
+
+int stage1_stop(int &socket_fd, int& stage_id)
+{
+    int ret = FAILED;
+    
+    int payload_size = 0, cmd = STOP, destination = STAGE1;
+    ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+
+    return ret;
+}
+
+int stage3_stop(int &socket_fd, int& stage_id)
+{
+    int ret = FAILED;
+    
+    int payload_size = 0, cmd = STOP, destination = STAGE3;
+    ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
 
     return ret;
 }

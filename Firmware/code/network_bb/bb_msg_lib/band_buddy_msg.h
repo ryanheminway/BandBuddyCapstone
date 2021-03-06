@@ -49,5 +49,8 @@ int send_wav_shared_mem(int &socket_fd, uint32_t &size);
 int send_webserver_data(int &socket_fd, uint8_t *webserver_data, int &size);
 int send_ack(int &socket_fd, int &destination, int &stage_id);
 int send_through_message(int &socket_fd, int &destination, int &cmd, int &stage_id, int &payload_size, int &dst_sock);
+int stage1_start(int &socket_fd, int& stage_id);
+int stage1_stop(int &socket_fd, int& stage_id);
+int stage3_stop(int &socket_fd, int& stage_id);
 
 #endif //BAND_BUDDY_MSG
