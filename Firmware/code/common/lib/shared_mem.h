@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #define BLK_SIZE 4096   //word align 
+
 constexpr const char* WAV_DATA_KEY = "/home/patch/BandBuddyCapstone/Firmware/code/common/lib/shared_wav.txt";  
 constexpr const char* MIDI_DATA_KEY = "/home/patch/BandBuddyCapstone/Firmware/code/common/lib/shared_midi.txt";
 

@@ -12,30 +12,26 @@
 #include <sys/types.h>
 
 #include "shared_mem.h"
-#include "band_buddy_msg.h"
 #include "band_buddy_server.h"
+#include "band_buddy_msg.h"
 
-#define DUMMY_FILE ((char*)"/home/patch/BandBuddyCapstone/Firmware/code/stage3/mock/hcb.wav")
+#define DUMMY_FILE ((char*)"/home/bandbuddy/BandBuddyCapstone/Data/footsteps.wav")
 
-int main(int argc, char* argv[])
+int main()
 {
-    char* dummy_file = DUMMY_FILE;
-    if (argc > 1) {
-        dummy_file = argv[1];
-    }
-
     // Get mock music file size 
     int size;
+    int destination = BACKBONE_SERVER;
     struct stat st;
-    if (stat(dummy_file, &st) != 0)
+    if (stat(DUMMY_FILE, &st) != 0)
     {
-        fprintf(stderr, "%s\n", "stat failed - are you sure the mock wav file exists?"); return 1;
+        fprintf(stderr, "%s\n", "stat failed!"); return 1;
     }
 
     size = (int)st.st_size;
 
     // Open the mock music file 
-    FILE* wav = fopen(dummy_file, "r");
+    FILE* wav = fopen(DUMMY_FILE, "r");
     if (!wav)
     {
         fprintf(stderr, "%s\n", "fopen failed!"); return 1;
@@ -55,18 +51,18 @@ int main(int argc, char* argv[])
         fprintf(stderr, "fread: expected %ld, wrote %u!\n", size, wrote);
     }
 
-    // Connect to the networkbb and ping it 
-    int id = STAGE1;
-    int bb_fd;
-    if (connect_and_register(id, bb_fd) == FAILED)
+    int stage = STAGE1;
+    int bb_fd; 
+    if (connect_and_register(stage, bb_fd) != SUCCESS)
     {
-        fprintf(stderr, "%s\n", "Network backbone connection failed!"); return 1;
+	   fprintf(stderr, "%s\n", "agh"); return 1;
     }
 
-    if (stage1_data_ready(bb_fd, size) != SUCCESS)
+    if (stage1_data_ready(bb_fd, size, destination) != SUCCESS)
     {
-        fprintf(stderr, "%s\n", "Failed to send data to the network backbone!"); return 1;
+	    fprintf(stderr, "%s\n", "ghafdh"); return 1;
     }
+    
 
     // Cleanup 
     detach_mem_blk(shared_mem);
@@ -75,5 +71,5 @@ int main(int argc, char* argv[])
 
     fprintf(stdout, "Size of test wav: %ld bytes\n", size);
 
-    return 5;
+    return 0;
 }

@@ -13,6 +13,7 @@ int main(void){
     int ret = FAILED;
     int sock_fd;
     int stage_id = STAGE1;
+    int destination = BACKBONE_SERVER;
 
     ret = connect_and_register(stage_id, sock_fd);
 
@@ -33,7 +34,7 @@ int main(void){
     printf("Writing data to shared memory\n");
     memcpy(mem_blk, message, message_sz);
 
-    stage1_data_ready(sock_fd, message_sz);
+    stage1_data_ready(sock_fd, message_sz, destination);
 
     detach_mem_blk(mem_blk);
     close(sock_fd);

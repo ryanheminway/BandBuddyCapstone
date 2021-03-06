@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/brick/bandbuddy/BandBuddyCapstone/Firmware/code/stage2')
+sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/stage2')
 import band_buddy_msg
 from django.shortcuts import render
 from django.views.generic import TemplateView, CreateView
@@ -13,18 +13,17 @@ from .forms import GenreForm
 #coordinate with ryan
 genre_dict= {'rock': 0, "jazz": 1, "funk": 2, "pop": 3, "classical": 4}
 
-
 def update_genre (request):
     #have it send to stage 2 here
     genre = request.POST.get('genre','0')
     if genre != '0':
         host = '127.0.0.1'
         port = 8080
-        socket_fd = band_buddy_msg.connect_and_register(host, port, band_buddy_msg.WEB_SERVER_STAGE)
+        socket_fd = band_buddy_msg.connect_and_register(host, port, band_buddy_msg.WEB_SERVER_STAGE)    
         print(genre)
         print(genre_dict[genre])
         band_buddy_msg.send_webserver_data(socket_fd,genre_dict[genre],band_buddy_msg.STAGE2)
-    
+
     form = GenreForm(request.POST or None) 
 
     context = { 

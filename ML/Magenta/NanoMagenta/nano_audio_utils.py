@@ -3,6 +3,24 @@ import nano_configs as configs
 import note_seq
 from note_seq import midi_synth
 from note_seq.protobuf import music_pb2
+import soundfile as sf
+import io
+
+# Read WAV data from network message into NP array
+# Based on librosa implementation (https://github.com/librosa)
+def read_wav_data(data, mono=True, dtype=np.float32):
+    np_wav_data, sr = sf.read(io.BytesIO(data))
+    # Transpose to match librosa style, which our models expect
+    np_wav_data = np_wav_data.T
+    
+    # Convert from stereo to mono track, if applicable
+    if mono:
+        # Ensure Fortran contiguity
+        np_wav_data = np.asfortranarray(np_wav_data)
+    if np_wav_data.ndim > 1:
+        np_wav_data = np.mean(np_wav_data, axis=0)
+
+    return np_wav_data, sr
 
 
 # If a sequence has notes at time before 0.0, scoot them up to 0
@@ -118,8 +136,9 @@ def make_tap_sequence(tempo, onset_times, onset_frames, onset_velocities,
 
 
 # Given a .wav file path, applies the Drumify model to the input track and outputs a drum track.
-def audio_to_drum(f, velocity_threshold, temperature, model, force_sync=False, start_windows_on_downbeat=False):
-    y, sr = librosa.load(f)
+def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=False, start_windows_on_downbeat=False):
+    #y, sr = librosa.load(f)
+    
     # pad the beginning to avoid errors with onsets right at the start
     y = np.concatenate([np.zeros(1000), y])
 
