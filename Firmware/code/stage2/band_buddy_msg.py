@@ -171,12 +171,12 @@ def recv_webserver_fbb(sock_fd, header_fbb):
         return webserver_fbb
 
 
-def send_msg(sock_fd, data1, destination, cmd):
+def send_msg(sock_fd, data, destination, cmd):
     ret = FAILED
     if cmd == WEBSERVER_DATA:
-        ret = send_webserver_data(sock_fd, data1, destination)
+        ret = send_webserver_data(sock_fd, data, destination)
     elif cmd == STAGE2_DATA_READY:
-        ret = send_midi_data(sock_fd, data1, destination)
+        ret = send_midi_data(sock_fd, data, destination)
     return ret
 
 def recv_msg(sock_fd):

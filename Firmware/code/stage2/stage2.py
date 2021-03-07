@@ -46,9 +46,11 @@ class Stage2Handler():
         full_drum_audio = audio.audio_to_drum(np_wav_data, sr, velocity_threshold=self.velocity_threshold,
                                                           temperature=self.temperature, model=model)
 
-        print("Got generated drum track: ", full_drum_audio)
+        #print("Got generated drum track: ", full_drum_audio)
         # full_drum_audio = np.repeat(full_drum_audio, 2)
         # print("Duplicated into stereo data")
+        print("Turning it into wav!")
+        full_drum_audio = audio.midi_to_wav(full_drum_audio, sr)
 
         print("Writing drum track to disk for good measure")
         sf.write("model_out_drums.wav", full_drum_audio, sr, subtype='PCM_24')
@@ -92,9 +94,10 @@ def main():
                 exit(1)
 
             print("got command: ", command)
+            print("we want command: ", network.STAGE1_DATA)
 
-            if (command == network.STAGE2_DATA_READY):
-                print("STAGE2 DATA READY CMD")
+            if (command == network.STAGE1_DATA):
+                print("STAGE1 DATA")
                 drum_data = handler.handle_wav_data(buff, model)
 
                 # print("SENDING DATA: ", drum_data)
@@ -102,7 +105,7 @@ def main():
 
                 # send wav data back to stage 3
                 print("Sending drum wav data\n")
-                network.send_msg(drum_data, network.BACKBONE_SERVER, network.STAGE3_DATA_READY)
+                network.send_msg(socket_fd, drum_data, network.BACKBONE_SERVER, network.STAGE2_DATA_READY)
             elif (command == network.WEBSERVER_DATA):
                 print("WEBSERVER DATA")
                 handler.handle_webserver_data(buff)

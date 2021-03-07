@@ -255,6 +255,7 @@ def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=Fals
     return full_drum_audio, full_tap_audio, tap_and_onsets, drums_and_original, combined_drum_sequence"""
 
 
-def midi_to_wav(data, sample_rate, sf2_path):
-    wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate, sf2_path=sf2_path))
+def midi_to_wav(data, sample_rate, sf2_path=None):
+    #wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate, sf2_path=sf2_path))
+    wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate))
     return wav_data
