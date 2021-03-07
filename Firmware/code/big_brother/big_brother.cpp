@@ -32,10 +32,15 @@ void button_pressed(int)
 // Should be run asynchronously - awaits a Stage 2 complete message from the network backbone
 void await_stage2_done()
 {
-    // ??? 
-    #warning "*** Receive stage2 data ready message required in server/msg.cpp ***"
+    int stage = BIG_BROTHER;
+    int ret = FAILED;
+    if ((ret = recieve_ack(networkbb_fd, stage)) == FAILED)
+    {
+        std::cerr << "Receiving Stage 2 completion ACK from the network backbone failed!" << '\n';
+        exit(1);
+    }
     
-    // !TEMP
+    // That's all 
     std::cout << "Stage 2 complete!" << '\n';
     state_machine.stage2_complete();
 }
