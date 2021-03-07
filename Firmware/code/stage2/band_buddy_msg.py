@@ -15,6 +15,7 @@ WEB_SERVER_STAGE = stages.Stages().WebServer
 REGISTER = cmds.Cmds().Register
 STAGE1_DATA = cmds.Cmds().Stage1_data
 STAGE2_DATA_READY = cmds.Cmds().Stage2_data_ready
+STAGE3_DATA_READY = cmds.Cmds().Stage3_data_ready
 WEBSERVER_DATA = cmds.Cmds().Web_server_data
 
 FAILED = -1
