@@ -9,7 +9,7 @@ Firmware/code/common/tests/shared_mem_read
 Firmware/code/stage1/mock/close_sharedmem
 Firmware/code/stage1/mock/shared_mem_to_wav_file
 Firmware/code/stage3/mock/dummy_wav
-
+Firmware/.vscode/settings.json
 build/
 
 **/cmake-build-debug
@@ -20,3 +20,4 @@ build/
 **/*.wav
 
 **/*.a
+__pycache__/

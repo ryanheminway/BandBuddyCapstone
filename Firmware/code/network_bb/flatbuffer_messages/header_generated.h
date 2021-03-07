@@ -16,31 +16,40 @@ enum Stages : uint8_t {
   Stages_Stage1 = 0,
   Stages_Stage2 = 1,
   Stages_Stage3 = 2,
+  Stages_WebServer = 3,
+  Stages_BIG_BROTHER = 4,
+  Stages_BACKBONE_SERVER = 5,
   Stages_MIN = Stages_Stage1,
-  Stages_MAX = Stages_Stage3
+  Stages_MAX = Stages_BACKBONE_SERVER
 };
 
-inline const Stages (&EnumValuesStages())[3] {
+inline const Stages (&EnumValuesStages())[6] {
   static const Stages values[] = {
     Stages_Stage1,
     Stages_Stage2,
-    Stages_Stage3
+    Stages_Stage3,
+    Stages_WebServer,
+    Stages_BIG_BROTHER,
+    Stages_BACKBONE_SERVER
   };
   return values;
 }
 
 inline const char * const *EnumNamesStages() {
-  static const char * const names[4] = {
+  static const char * const names[7] = {
     "Stage1",
     "Stage2",
     "Stage3",
+    "WebServer",
+    "BIG_BROTHER",
+    "BACKBONE_SERVER",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameStages(Stages e) {
-  if (flatbuffers::IsOutRange(e, Stages_Stage1, Stages_Stage3)) return "";
+  if (flatbuffers::IsOutRange(e, Stages_Stage1, Stages_BACKBONE_SERVER)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesStages()[index];
 }
@@ -51,35 +60,50 @@ enum Cmds : uint8_t {
   Cmds_Stage2_data_ready = 2,
   Cmds_Stage3_data_ready = 3,
   Cmds_Stage1_data = 4,
+  Cmds_Web_server_data = 5,
+  Cmds_Stop = 6,
+  Cmds_Start = 7,
+  Cmds_Button_pressed = 8,
+  Cmds_ACK = 9,
   Cmds_MIN = Cmds_Register,
-  Cmds_MAX = Cmds_Stage1_data
+  Cmds_MAX = Cmds_ACK
 };
 
-inline const Cmds (&EnumValuesCmds())[5] {
+inline const Cmds (&EnumValuesCmds())[10] {
   static const Cmds values[] = {
     Cmds_Register,
     Cmds_Stage1_data_ready,
     Cmds_Stage2_data_ready,
     Cmds_Stage3_data_ready,
-    Cmds_Stage1_data
+    Cmds_Stage1_data,
+    Cmds_Web_server_data,
+    Cmds_Stop,
+    Cmds_Start,
+    Cmds_Button_pressed,
+    Cmds_ACK
   };
   return values;
 }
 
 inline const char * const *EnumNamesCmds() {
-  static const char * const names[6] = {
+  static const char * const names[11] = {
     "Register",
     "Stage1_data_ready",
     "Stage2_data_ready",
     "Stage3_data_ready",
     "Stage1_data",
+    "Web_server_data",
+    "Stop",
+    "Start",
+    "Button_pressed",
+    "ACK",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameCmds(Cmds e) {
-  if (flatbuffers::IsOutRange(e, Cmds_Register, Cmds_Stage1_data)) return "";
+  if (flatbuffers::IsOutRange(e, Cmds_Register, Cmds_ACK)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesCmds()[index];
 }
