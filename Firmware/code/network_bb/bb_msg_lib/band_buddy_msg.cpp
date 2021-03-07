@@ -123,7 +123,7 @@ static int send_payload(int &socket_fd, unsigned char *data, int size){
 
 }
 
-int stage1_data_ready(int &socket_fd, int &destination, int &size){
+int stage1_data_ready(int &socket_fd, int &destination, int size){
     int ret = FAILED;
     int cmd = STAGE1_DATA_READY;
     int payload_size; 

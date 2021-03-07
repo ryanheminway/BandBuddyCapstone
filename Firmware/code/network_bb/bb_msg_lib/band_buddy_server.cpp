@@ -162,6 +162,32 @@ int recieve_header_and_stage2_fbb(int &sockfd, uint32_t &midi_data_sz){
     return ret;
 }
 
+int recieve_header_and_stage1_fbb(int &sockfd, uint32_t &wave_data_sz){
+    int ret = FAILED;
+    int destination, cmd, stage_id, payload_size;
+    char buffer[1024];
+
+    ret = retrieve_header(buffer, sockfd);
+
+    if (ret == FAILED){
+        std::cout << "Failed to retrieve header\n";
+        return FAILED;
+    }
+
+    parse_header(buffer, destination, cmd, stage_id, payload_size);
+
+    //sanity check 
+    if( destination != BIG_BROTHER && cmd != STAGE1_DATA_READY){
+        std::cout << "Big brother cannot process this message\n";
+        return FAILED;
+    }
+    
+
+    ret = recieve_stage1_fbb(sockfd, payload_size, wave_data_sz);
+
+    return ret;
+}
+
 int recieve_and_send_webserver_fbb(int &sock_fd, int &payload_size, int &destination_socket)
 {
     int ret = FAILED;

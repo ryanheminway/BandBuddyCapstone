@@ -84,7 +84,6 @@ void await_button_press()
 
     // Lambda prevents spurious wakeups
     is_button_pressed_cv.wait(lock, [&]() { return is_button_pressed.load(std::memory_order::memory_order_seq_cst); });
-
 }
 
 void *wait_button_pressed(void *thread_args)
@@ -113,6 +112,8 @@ void *wait_button_pressed(void *thread_args)
             break;
         case STOP:
             stop_recording();
+            //wait for main thread to finish
+            await_button_press();
             send_ack(networkbb_fd, this_destination, this_stage_id);
             break;
         default:
@@ -610,7 +611,7 @@ int write_to_shared_mem()
 
 int ping_big_brother()
 {
-    int destination = BIG_BROTHER; 
+    int destination = BIG_BROTHER;
     int err = (stage1_data_ready(networkbb_fd, destination, num_bytes_read) == SUCCESS) ? 0 : 1;
     if (err)
     {
@@ -647,50 +648,47 @@ int main(int argc, char *argv[])
     while (1)
     {
 
-        //TODO: get rid off the if and use the call back again
-        //if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
-        //{
-            // Reset the button press status
-            //is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
-            await_button_press();
+        //is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
+        await_button_press();
 
-            // Init the capture handle
-            err = init_capture_handle();
-            if (err)
-            {
-                return err;
-            }
+        // Init the capture handle
+        err = init_capture_handle();
+        if (err)
+        {
+            return err;
+        }
 
-            // Prepare the capture handle
-            if ((err = prepare_capture_device()))
-            {
-                return err;
-            }
+        // Prepare the capture handle
+        if ((err = prepare_capture_device()))
+        {
+            return err;
+        }
 
-            // Await a button press
-            //await_button_press();
+        // Await a button press
+        //await_button_press();
 
-            // Record
-            if ((err = record_until_button_press()))
-            {
-                break;
-            }
+        // Record
+        if ((err = record_until_button_press()))
+        {
+            break;
+        }
 
-            // Write to shared memory
-            if ((err = write_to_shared_mem()))
-            {
-                break;
-            }
+        // Write to shared memory
+        if ((err = write_to_shared_mem()))
+        {
+            break;
+        }
 
-            // Inform the network backbone that data is ready
-            if ((err = ping_big_brother()))
-            {
-                break;
-            }
+        // Inform the network backbone that data is ready
+        if ((err = ping_big_brother()))
+        {
+            break;
+        }
 
-            // !TEMP
-            fprintf(stdout, "Num bytes read: %d\n", num_bytes_read);
-        //}
+        is_button_pressed_cv.notify_one();
+        // !TEMP
+        fprintf(stdout, "Num bytes read: %d\n", num_bytes_read);
+
     }
 
     // Cleanup

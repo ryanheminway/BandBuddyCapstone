@@ -64,9 +64,12 @@ void callback_init(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: INIT" << '\n';
 
+
     // Start Stage 1 recording
     int stage = BIG_BROTHER;
     stage1_start(networkbb_fd, stage);
+
+
     
     // Wait for Stage 1 ACK
     await_stage_ack();
@@ -77,12 +80,32 @@ void callback_stage_1(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: STAGE_1" << '\n';
 
+    uint32_t wave_data_sz;
+    int ret = FAILED;
+
     // Stop Stage 1 recording
     int stage = BIG_BROTHER;
+    int destination = BACKBONE_SERVER;
     stage1_stop(networkbb_fd, stage);
+
+
+    //receive wave data size
+    if( (ret = recieve_header_and_stage1_fbb(networkbb_fd, wave_data_sz)) == FAILED){
+        std::cerr << "Recieving stage1 fbb\n";
+        exit(1);
+    }
 
     // Wait for Stage 1 ACK
     await_stage_ack();
+
+
+    //tell backbone server to send wave data to stage2
+    if( (ret = stage1_data_ready(networkbb_fd, destination, wave_data_sz)) == FAILED){
+        std::cerr << " Could not send stage1_data_ready message to backbone\n";
+        exit(1);
+    }
+
+    //DO WE WANT ANOTHER ACK HERE OR IS THAT OVERKILL
 
     // Asynchronously wait for Stage 2 to complete 
     auto stage2_thread = std::thread(await_stage2_done);
