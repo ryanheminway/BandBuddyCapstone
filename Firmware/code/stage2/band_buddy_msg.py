@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
+sys.path.insert(0, '/home/bandbuddy/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
 import socket
 import flatbuffers
 import Server.Header.Cmds as cmds 
@@ -11,12 +11,14 @@ STAGE1 = stages.Stages().Stage1
 STAGE2 = stages.Stages().Stage2
 STAGE3 = stages.Stages().Stage3
 WEB_SERVER_STAGE = stages.Stages().WebServer
+BACKBONE_SERVER = stages.Stages().BACKBONE_SERVER
 
 REGISTER = cmds.Cmds().Register
 STAGE1_DATA = cmds.Cmds().Stage1_data
 STAGE2_DATA_READY = cmds.Cmds().Stage2_data_ready
 STAGE3_DATA_READY = cmds.Cmds().Stage3_data_ready
 WEBSERVER_DATA = cmds.Cmds().Web_server_data
+
 
 FAILED = -1
 SUCCESS = 1
@@ -61,7 +63,7 @@ def create_and_send_header(sck_fd, payload_size, destination, cmd, stage_id):
     ret = sck_fd.sendall(header_size.to_bytes(4, byteorder="little"))
     print("header size: ", header_size)
     print("sent from sendall: ", sck_fd.sendall(buf))
-    return ret == None ? SUCCESS : FAILED
+    return SUCCESS if ret == None else FAILED
 
 def connect_and_register(host, port, stage_id):
     payload_size = 0
@@ -87,7 +89,7 @@ def get_header_size():
     return len(buf)
 
 
-def recv_msg(sock_fd, n):
+def recv_bytes(sock_fd, n):
     # Helper function to recv n bytes or return None if EOF is hit
     data = bytearray()
     while len(data) < n:
@@ -99,11 +101,11 @@ def recv_msg(sock_fd, n):
 
 
 def recv_header(sock_fd):
-    header_size_array = recv_msg(sock_fd, 4)
+    header_size_array = recv_bytes(sock_fd, 4)
     header_size = int.from_bytes(header_size_array, "little")
 
     print("Header size after conversion %d" %header_size)
-    header_raw = recv_msg(sock_fd, header_size)
+    header_raw = recv_bytes(sock_fd, header_size)
     header_msg = header.Header.GetRootAs(header_raw, 0)
     #wav_data = get_payload(sock_fd, header_msg.PayloadSize())
     #print('Wave data %s' %wav_data)
@@ -111,14 +113,14 @@ def recv_header(sock_fd):
 
 
 def get_payload(sock_fd, size):
-    raw_data = recv_msg(sock_fd, size)
+    raw_data = recv_bytes(sock_fd, size)
     return raw_data
 
 
 def send_payload(sock_fd, data):
     ret = FAILED
     ret = sock_fd.sendall(data)
-    return ret == None ? SUCCESS : FAILED
+    return SUCCESS if ret == None else FAILED
 
 
 def send_midi_data(sock_fd, raw_data, destination):
@@ -173,17 +175,17 @@ def send_msg(sock_fd, data1, destination, cmd):
     ret = FAILED
     if cmd == WEBSERVER_DATA:
         ret = send_webserver_data(sock_fd, data1, destination)
-    else if cmd == STAGE2_DATA_READY:
+    elif cmd == STAGE2_DATA_READY:
         ret = send_midi_data(sock_fd, data1, destination)
     return ret
 
 def recv_msg(sock_fd):
     header_fbb = recv_header(sock_fd)
-    buf = ''
+    buf = None
 
     if header_fbb.Cmd() == cmds.Cmds().Stage1_data:
         buf = recv_wav_msg(sock_fd, header_fbb)
-    else if header_fbb.Cmd() == cmds.Cmds().Web_server_data:
+    elif header_fbb.Cmd() == cmds.Cmds().Web_server_data:
         buf = recv_webserver_fbb(sock_fd, header_fbb)
 
     return header_fbb.Cmd(), buf

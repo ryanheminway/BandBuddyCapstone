@@ -79,28 +79,33 @@ def main():
     # Build GrooVAE model from checkpoint variables and config model definition
     model = TrainedModel(config_2bar_tap, 1, checkpoint_dir_or_path=GROOVAE_2BAR_TAP_FIXED_VELOCITY)
 
+    print("Stage2 connected")
     socket_fd = network.connect_and_register(host, port, network.STAGE2)
 
     while True:
         try:
             print("Waiting for commands from network backbone\n")
-            command, buffer = network.recv_msg(socket_fd)
+            command, buff = network.recv_msg(socket_fd)
 
-            if buffer == None:
+            if buff == None:
                 print("Could not get payload... program dying")
                 exit(1)
 
-            if (command == STAGE2_DATA_READY):
-                drum_data = handler.handle_wav_data(buffer, model)
+            print("got command: ", command)
+
+            if (command == network.STAGE2_DATA_READY):
+                print("STAGE2 DATA READY CMD")
+                drum_data = handler.handle_wav_data(buff, model)
 
                 # print("SENDING DATA: ", drum_data)
                 print("SENDING LEN: ", len(drum_data))
 
                 # send wav data back to stage 3
                 print("Sending drum wav data\n")
-                network.send_msg(drum_data, STAGE3, STAGE3_DATA_READY)
-            elif (command == WEBSERVER_DATA):
-                handler.handle_webserver_data(buffer)
+                network.send_msg(drum_data, network.BACKBONE_SERVER, network.STAGE3_DATA_READY)
+            elif (command == network.WEBSERVER_DATA):
+                print("WEBSERVER DATA")
+                handler.handle_webserver_data(buff)
 
         except KeyboardInterrupt:
             print("Shutting down stage2")
