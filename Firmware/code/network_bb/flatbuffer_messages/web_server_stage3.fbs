@@ -1,0 +1,9 @@
+namespace Server.WebServer_Stage3;
+
+table WebServerStage3{
+    drums: uint8 = 0;
+    guitar: uint8 = 0;
+
+}
+
+root_type WebServerStage3;
