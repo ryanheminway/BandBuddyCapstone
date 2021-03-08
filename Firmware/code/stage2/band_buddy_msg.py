@@ -60,7 +60,10 @@ def create_and_send_header(sck_fd, payload_size, destination, cmd, stage_id):
     ret = sck_fd.sendall(header_size.to_bytes(4, byteorder="little"))
     print("header size: ", header_size)
     print("sent from sendall: ", sck_fd.sendall(buf))
-    return ret == None ? SUCCESS : FAILED
+    if ret == None:
+        return SUCCESS
+    else:
+        return FAILED
 
 def connect_and_register(host, port, stage_id):
     payload_size = 0
@@ -117,7 +120,10 @@ def get_payload(sock_fd, size):
 def send_payload(sock_fd, data):
     ret = FAILED
     ret = sock_fd.sendall(data)
-    return ret == None ? SUCCESS : FAILED
+        if ret == None:
+        return SUCCESS
+    else:
+        return FAILED
 
 
 def send_midi_data(sock_fd, raw_data, destination):
@@ -172,7 +178,7 @@ def send_msg(sock_fd, data1, destination, cmd):
     ret = FAILED
     if cmd == WEBSERVER_DATA:
         ret = send_webserver_data(sock_fd, data1, destination)
-    else if cmd == STAGE2_DATA_READY:
+    elif cmd == STAGE2_DATA_READY:
         ret = send_midi_data(sock_fd, data1, destination)
     return ret
 
@@ -182,7 +188,7 @@ def recv_msg(sock_fd):
 
     if header_fbb.Cmd() == cmds.Cmds().Stage1_data:
         buf = recv_wav_msg(sock_fd, header_fbb)
-    else if header_fbb.Cmd() == cmds.Cmds().Web_server_data:
+    elif header_fbb.Cmd() == cmds.Cmds().Web_server_data:
         buf = recv_webserver_fbb(sock_fd, header_fbb)
 
     return header_fbb.Cmd(), buf
