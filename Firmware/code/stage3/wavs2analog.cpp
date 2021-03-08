@@ -16,7 +16,6 @@
 // The buffer into which to synchronize wav data
 static uint8_t sync_buffer[SYNC_BUFFER_SIZE];
 
-
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
 
@@ -35,13 +34,11 @@ static uint8_t sync_buffer[SYNC_BUFFER_SIZE];
 // The number of bytes in a period
 #define BYTES_PER_PERIOD (BYTES_PER_FRAME * FRAMES_PER_PERIOD)
 
-
 // The ALSA playback handle
-static snd_pcm_t* playback_handle;
+static snd_pcm_t *playback_handle;
 
 // The ALSA capture device name to use
-static const char* alsa_capture_device_name = "plughw:CARD=pisound";
-
+static const char *alsa_capture_device_name = "plughw:CARD=pisound";
 
 // Cancel atomic: set high when the button is pressed
 std::atomic_bool is_button_pressed, is_audio_playing;
@@ -49,22 +46,45 @@ std::atomic_bool is_button_pressed, is_audio_playing;
 // The mutex upon which to lock the condition variable
 std::mutex is_button_pressed_mutex;
 
+// The condition variable upon which to alert a button press
+static std::condition_variable is_button_pressed_cv;
+
+// Set high when listening thread gets a stage2_data_ready message
+static std::atomic_bool midi_data_ready;
+
+void await_network_backbone()
+{
+    // Acquire the mutex and await the condition variable
+    std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
+
+    // Lambda prevents spurious wakeups
+    is_button_pressed_cv.wait(lock, [&]() { return midi_data_ready.load(std::memory_order::memory_order_seq_cst); });
+}
 
 // The socket descriptor for the network backbone
 static int networkbb_fd;
 
+//size of midi data from network_bb
+static uint32_t midi_size = 0;
+
+void start_recording()
+{
+    //set to high to notify that stage2_data is in shared mem block
+    midi_data_ready.store(true, std::memory_order::memory_order_seq_cst);
+    is_button_pressed_cv.notify_one();
+}
 
 void stop_recording()
 {
-    // Acquire the mutex and await the condition variable
-    //std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
+    //set to high to breakout of looping
     is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
+    midi_data_ready.store(false, std::memory_order::memory_order_seq_cst);
 }
 
 void *wait_button_pressed(void *thread_args)
 {
-    #warning "Clean up wait_button_pressed function\n"
-    int cmd; 
+#warning "Clean up wait_button_pressed function\n"
+    int cmd;
     int destination;
     int stage_id;
     int payload_size;
@@ -73,18 +93,24 @@ void *wait_button_pressed(void *thread_args)
     int this_stage_id = STAGE3;
     int this_destination = BIG_BROTHER;
 
-    while(1){
+    while (1)
+    {
 
         retrieve_header(buffer, networkbb_fd);
         parse_header(buffer, destination, cmd, stage_id, payload_size);
-        switch(cmd){
-            case STOP:
-                stop_recording();
-                send_ack(networkbb_fd, this_destination, this_stage_id);
-                break;
-            default:
-                std::cout << " Sorrry kid wrong command\n";
-                break;
+        switch (cmd)
+        {
+        case STAGE2_DATA_READY:
+            recieve_stage2_fbb(networkbb_fd, payload_size, midi_size);
+            start_recording();
+            break;
+        case STOP:
+            stop_recording();
+            send_ack(networkbb_fd, this_destination, this_stage_id);
+            break;
+        default:
+            std::cout << " Sorrry kid wrong command\n";
+            break;
         }
     }
 }
@@ -98,11 +124,11 @@ void *wait_button_pressed(void *thread_args)
 }*/
 
 // Print an error and its snd string message to stderr.
-void print_error(int err, const char* message, ...)
+void print_error(int err, const char *message, ...)
 {
     va_list args;
     va_start(args, message);
- 
+
     vfprintf(stderr, message, args);
     fprintf(stderr, " (error: %s)\n", snd_strerror(err));
 
@@ -113,26 +139,28 @@ void print_error(int err, const char* message, ...)
 int connect_networkbb()
 {
     int id = STAGE3;
-    int err = connect_and_register(id, networkbb_fd); 
+    int err = connect_and_register(id, networkbb_fd);
     return err;
 }
 
-// Awaits a message from the backbone containing the size of the wav file in shared memory. 
+// Awaits a message from the backbone containing the size of the wav file in shared memory.
 // Returns the size, in bytes, or 0 if read failed
 static int await_message_from_backbone()
 {
     // Retrieve the info from the backbone
     uint32_t midi_size;
-    if (recieve_header_and_stage2_fbb(networkbb_fd, midi_size) == FAILED) {
-        fprintf(stderr, "%s\n", "Awaiting backbone ping failed!"); return 1;
+    if (recieve_header_and_stage2_fbb(networkbb_fd, midi_size) == FAILED)
+    {
+        fprintf(stderr, "%s\n", "Awaiting backbone ping failed!");
+        return 1;
     }
 
     return midi_size;
 }
 
-static int synchronize_wavs(uint8_t* midi, int midi_size, uint8_t* wav, int wav_size)
+static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_size)
 {
-    // Ensure that the two sizes are the same - if not, we have a lineup issue 
+    // Ensure that the two sizes are the same - if not, we have a lineup issue
     if (midi_size != wav_size)
     {
         fprintf(stderr, "Audio source size mismatch! midi is %d bytes; wav is %d bytes!\n", midi_size, wav_size);
@@ -140,34 +168,36 @@ static int synchronize_wavs(uint8_t* midi, int midi_size, uint8_t* wav, int wav_
     }
 
     // Determine the normalization constant for each buffer
-    int16_t norm_midi_max = INT16_MIN, norm_midi_min = INT16_MAX; 
+    int16_t norm_midi_max = INT16_MIN, norm_midi_min = INT16_MAX;
     int16_t norm_wav_max = INT16_MIN, norm_wav_min = INT16_MAX;
 
-    for (int i = 44; i < midi_size; i += 2) 
+    for (int i = 44; i < midi_size; i += 2)
     {
         int16_t midi_word_int = midi[i] | (midi[i + 1] << 8);
         int16_t wav_word_int = wav[i] | (wav[i + 1] << 8);
-        if (midi_word_int > norm_midi_max) 
+        if (midi_word_int > norm_midi_max)
         {
             norm_midi_max = midi_word_int;
-        } else if (midi_word_int < norm_midi_min)
+        }
+        else if (midi_word_int < norm_midi_min)
         {
-            norm_midi_min = midi_word_int; 
+            norm_midi_min = midi_word_int;
         }
         if (wav_word_int > norm_wav_max)
         {
             norm_wav_max = wav_word_int;
-        } 
+        }
         else if (wav_word_int < norm_wav_min)
         {
-            norm_wav_min = wav_word_int; 
+            norm_wav_min = wav_word_int;
         }
-    } fprintf(stdout, "midi: [%d, %d]\twav: [%d, %d]\n", norm_midi_min, norm_midi_max, norm_wav_min, norm_wav_max);
+    }
+    fprintf(stdout, "midi: [%d, %d]\twav: [%d, %d]\n", norm_midi_min, norm_midi_max, norm_wav_min, norm_wav_max);
 
     double norm_max_avg = (norm_midi_max + norm_wav_max / 2);
 
     // Skip the headers - loop over the rest of the content
-    for (int i = 44; i < midi_size; i += 2) 
+    for (int i = 44; i < midi_size; i += 2)
     {
         int16_t midi_word_int = midi[i] | (midi[i + 1] << 8);
         double midi_word = (double)midi_word_int;
@@ -187,11 +217,11 @@ static int synchronize_wavs(uint8_t* midi, int midi_size, uint8_t* wav, int wav_
     }
 
     return 0;
-    // memcpy(sync_buffer, midi, midi_size); 
+    // memcpy(sync_buffer, midi, midi_size);
 
-    // // For now, open the test file 
+    // // For now, open the test file
     // FILE* test_drums = fopen("/home/patch/BandBuddyCapstone/Firmware/code/stage3/mock/hcb_drums.wav", "r");
-    // if (!test_drums) 
+    // if (!test_drums)
     // {
     //     fprintf(stderr, "%s\n", "The mock drum file (hbc_drums.wav) was not found! Did you forget to copy it into the stage3 mock folder?");
     //     return 1;
@@ -211,16 +241,15 @@ static int synchronize_wavs(uint8_t* midi, int midi_size, uint8_t* wav, int wav_
     //     int16_t avg = (int16_t)avg_float;
 
     //     sync_buffer[i - 44] = avg & 0xFF;
-    //     sync_buffer[i + 1 - 44] = (avg >> 8) & 0xFF; 
+    //     sync_buffer[i + 1 - 44] = (avg >> 8) & 0xFF;
     // }
 
     // return 0;
 }
 
-
 static int init_capture_handle()
 {
-    int err; 
+    int err;
 
     // Open the pisound audio device
     if ((err = snd_pcm_open(&playback_handle, alsa_capture_device_name, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK)) < 0)
@@ -230,84 +259,97 @@ static int init_capture_handle()
     }
 
     // Allocate hardware parameters for this device
-    snd_pcm_hw_params_t* hw_params;
+    snd_pcm_hw_params_t *hw_params;
     if ((err = snd_pcm_hw_params_malloc(&hw_params)) < 0)
     {
-        print_error(err, "Cannot allocate hardware parameters!"); return err;
+        print_error(err, "Cannot allocate hardware parameters!");
+        return err;
     }
 
-    // Initialize the hardware params 
+    // Initialize the hardware params
     if ((err = snd_pcm_hw_params_any(playback_handle, hw_params)) < 0)
     {
-        print_error(err, "Cannot initialize hardware parameters!"); return err;
+        print_error(err, "Cannot initialize hardware parameters!");
+        return err;
     }
 
     // Receive data in interleaved format (vs each channel in completion at a time) to directly write data as WAV
     if ((err = snd_pcm_hw_params_set_access(playback_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0)
     {
-        print_error(err, "Cannot set access type to interleaved!"); return err;
+        print_error(err, "Cannot set access type to interleaved!");
+        return err;
     }
 
     // Receive data as unsigned 16-bit frames
     if ((err = snd_pcm_hw_params_set_format(playback_handle, hw_params, SND_PCM_FORMAT_S16)) < 0)
     {
-        print_error(err, "Cannot set frame format to unsigned 16-bit!"); return err;
+        print_error(err, "Cannot set frame format to unsigned 16-bit!");
+        return err;
     }
 
     // Target 48KHz; if that isn't possible, something has gone wrong
     unsigned int rate = SAMPLE_RATE;
     if ((err = snd_pcm_hw_params_set_rate_near(playback_handle, hw_params, &rate, 0)) < 0)
     {
-        print_error(err, "Could not set sample rate: pcm call failed!\n"); return err;
+        print_error(err, "Could not set sample rate: pcm call failed!\n");
+        return err;
     }
     if (rate != SAMPLE_RATE)
     {
-        fprintf(stderr, "Could not set sample rate: target %d, returned %d!\n", SAMPLE_RATE, rate); return 1;
+        fprintf(stderr, "Could not set sample rate: target %d, returned %d!\n", SAMPLE_RATE, rate);
+        return 1;
     }
 
-    // Capture stereo audio 
+    // Capture stereo audio
     if ((err = snd_pcm_hw_params_set_channels(playback_handle, hw_params, 2)) < 0)
     {
-        print_error(err, "Could not request stereo audio!\n"); return err;
+        print_error(err, "Could not request stereo audio!\n");
+        return err;
     }
 
     // Set the period size
     snd_pcm_uframes_t num_frames = FRAMES_PER_PERIOD;
     if ((err = snd_pcm_hw_params_set_period_size_near(playback_handle, hw_params, &num_frames, 0)) < 0)
     {
-        print_error(err, "Could not set the period size!\n"); return err;
+        print_error(err, "Could not set the period size!\n");
+        return err;
     }
-    if (num_frames != FRAMES_PER_PERIOD) {
-        fprintf(stderr, "Could not set frames/period: target %d, returned %lu!\n", FRAMES_PER_PERIOD, num_frames); 
+    if (num_frames != FRAMES_PER_PERIOD)
+    {
+        fprintf(stderr, "Could not set frames/period: target %d, returned %lu!\n", FRAMES_PER_PERIOD, num_frames);
         return 1;
     }
 
     // Deliver the hardware params to the handle
     if ((err = snd_pcm_hw_params(playback_handle, hw_params)) < 0)
     {
-        print_error(err, "Could not deliver hardware parameters to the capture device!"); return err;
+        print_error(err, "Could not deliver hardware parameters to the capture device!");
+        return err;
     }
 
     // Free the hw params
     snd_pcm_hw_params_free(hw_params);
 
-    // Allocate software parameters 
-    snd_pcm_sw_params_t* sw_params;
+    // Allocate software parameters
+    snd_pcm_sw_params_t *sw_params;
     if ((err = snd_pcm_sw_params_malloc(&sw_params)) < 0)
     {
-        print_error(err, "Could not allocate software parameters for the capture device!"); return err;
+        print_error(err, "Could not allocate software parameters for the capture device!");
+        return err;
     }
 
     // Initialize the software parameters
     if ((err = snd_pcm_sw_params_current(playback_handle, sw_params)) < 0)
     {
-        print_error(err, "Could not initialize the software parameters for the capture device!"); return err;
+        print_error(err, "Could not initialize the software parameters for the capture device!");
+        return err;
     }
 
     // Set the software parameters
     if ((err = snd_pcm_sw_params(playback_handle, sw_params)) < 0)
     {
-        print_error(err, "Could not deliver the software parameters to the capture device!"); return err;
+        print_error(err, "Could not deliver the software parameters to the capture device!");
+        return err;
     }
 
     // Free the sw params
@@ -326,7 +368,7 @@ static int play_loop(int loop_size_bytes)
 
     while (sample_index < loop_size_bytes)
     {
-        // If the button has been pressed, time to stop 
+        // If the button has been pressed, time to stop
         if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
         {
             return 1;
@@ -334,56 +376,59 @@ static int play_loop(int loop_size_bytes)
 
         if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
         {
-            print_error(err, "Poll failed!\n"); return err;
+            print_error(err, "Poll failed!\n");
+            return err;
         }
 
-        int frames_to_deliver; 
-        if ((frames_to_deliver = snd_pcm_avail_update(playback_handle)) < 0) 
+        int frames_to_deliver;
+        if ((frames_to_deliver = snd_pcm_avail_update(playback_handle)) < 0)
         {
             if (frames_to_deliver == -EPIPE)
             {
-                print_error(frames_to_deliver, "An xrun occurred!"); return frames_to_deliver;
+                print_error(frames_to_deliver, "An xrun occurred!");
+                return frames_to_deliver;
             }
-            else 
+            else
             {
-                print_error(frames_to_deliver, "An unknown error occurred!\n"); return frames_to_deliver;
+                print_error(frames_to_deliver, "An unknown error occurred!\n");
+                return frames_to_deliver;
             }
         }
 
-        // Cap the frames to write 
+        // Cap the frames to write
         frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
 
-        int frames_written; 
+        int frames_written;
         if ((frames_written = snd_pcm_writei(playback_handle, sync_buffer + sample_index, FRAMES_PER_PERIOD)) != frames_to_deliver)
         {
-            if (frames_written == -EPIPE) 
+            if (frames_written == -EPIPE)
             {
                 fprintf(stdout, "%s\n", "underrun!");
                 snd_pcm_prepare(playback_handle);
             }
-            else 
+            else
             {
-                fprintf(stderr, "writei (wrote %d): expected to write %d frames, actually wrote %d!\n", 
-                   sample_index, FRAMES_PER_PERIOD, frames_written);
+                fprintf(stderr, "writei (wrote %d): expected to write %d frames, actually wrote %d!\n",
+                        sample_index, FRAMES_PER_PERIOD, frames_written);
                 return -frames_written;
             }
         }
         sample_index += BYTES_PER_FRAME * frames_written;
-    }    
+    }
 
-    return 0;                 
+    return 0;
 }
 
 int close_playback_handle()
 {
-    // Flush the playback handle - this is a BUSY wait! Do better! 
+    // Flush the playback handle - this is a BUSY wait! Do better!
     //while (snd_pcm_drain(playback_handle) == -EAGAIN);
     return snd_pcm_close(playback_handle);
 }
 
 static int loop_audio_until_cancelled(int loop_size)
 {
-    int err; 
+    int err;
 
     // Initialize the playback handle
     if ((err = init_capture_handle()))
@@ -391,39 +436,41 @@ static int loop_audio_until_cancelled(int loop_size)
         return 1;
     }
 
-    // Mark that audio is playing 
+    // Mark that audio is playing
     //is_audio_playing.store(true, std::memory_order::memory_order_seq_cst);
 
     // Loop until the button is pressed
-    while ((err = play_loop(loop_size)) == 0);
+    while ((err = play_loop(loop_size)) == 0)
+        ;
 
     // Clear the successful exit value from the error code - error handling needs to be done much better throughout Stages 1 and 3
-    if (err == 1) err = 0;
+    if (err == 1)
+        err = 0;
 
-    // Mark that audio is no longer playing 
+    // Mark that audio is no longer playing
     //is_audio_playing.store(false, std::memory_order::memory_order_seq_cst);
 
     return err | close_playback_handle();
 }
 
-int delete_shared_memory(void* mem)
+int delete_shared_memory(void *mem)
 {
     bool err = detach_mem_blk(mem);
-    #warning *** TEMPORARILY NOT DESTROYING MEMBLK AFTER PLAYTHROUGH! ***
+#warning *** TEMPORARILY NOT DESTROYING MEMBLK AFTER PLAYTHROUGH! ***
     // err &= destroy_mem_blk(mem_block_addr);
     return err;
 }
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     // Register button press signal handler
     //signal(SIGINT, button_pressed);
     pthread_t thread;
     int err;
 
-    // Connect to the network backbone 
+    // Connect to the network backbone
     int failed = FAILED;
-    int what = connect_networkbb(); 
+    int what = connect_networkbb();
     if (what == failed)
     {
         fprintf(stderr, "%s\n", "Could not connect to the network backbone!");
@@ -445,24 +492,26 @@ int main(int argc, char** argv)
         is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
 
         // Await instruction from the network backbone
-        int midi_size;
-        if (!(midi_size = await_message_from_backbone()))
+        //int midi_size;
+        /*if (!(midi_size = await_message_from_backbone()))
         {
             fprintf(stderr, "%s\n", "Backbone message receive failed!");
             return 1;
-        }
+        }*/
 
-        // Retrieve the shared memory pointers 
-        uint8_t* midi = (uint8_t*)get_midi_mem_blk(midi_size);
+        await_network_backbone();
+
+        // Retrieve the shared memory pointers
+        uint8_t *midi = (uint8_t *)get_midi_mem_blk(midi_size);
         if (!midi)
         {
             fprintf(stderr, "%s\n", "Unable to retrieve midi shared memory pointer!");
             return 1;
         }
 
-        #warning *** WAV MEMBLK SIZE ASSUMED TO BE == TO MIDI MEMBLK!!! ***
+#warning *** WAV MEMBLK SIZE ASSUMED TO BE == TO MIDI MEMBLK!!! ***
         int wav_size = midi_size;
-        uint8_t* wav = (uint8_t*)get_wav_mem_blk(0);
+        uint8_t *wav = (uint8_t *)get_wav_mem_blk(0);
         if (!wav)
         {
             fprintf(stderr, "%s\n", "Unable to retrieve wav shared memory pointer!");
@@ -477,7 +526,7 @@ int main(int argc, char** argv)
         }
 
         // Loop the audio until told not to (!TODO ???)
-        
+
         if ((err = loop_audio_until_cancelled(midi_size)))
         {
             fprintf(stderr, "loop audio returned %d!\n", err);
@@ -488,7 +537,7 @@ int main(int argc, char** argv)
         detach_mem_blk(wav);
         //delete_shared_memory(mem);
 
-        if (err) 
+        if (err)
         {
             break;
         }

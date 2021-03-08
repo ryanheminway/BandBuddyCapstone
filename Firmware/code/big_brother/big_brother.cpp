@@ -8,6 +8,7 @@
 #include "band_buddy_msg.h"
 #include "band_buddy_server.h"
 #include "big_brother_state_machine.h"
+#include "shared_mem.h"
 
 // Mutex for button presses.
 std::mutex button_press_mutex;
@@ -64,13 +65,10 @@ void callback_init(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: INIT" << '\n';
 
-
     // Start Stage 1 recording
     int stage = BIG_BROTHER;
     stage1_start(networkbb_fd, stage);
 
-
-    
     // Wait for Stage 1 ACK
     await_stage_ack();
 }
@@ -88,28 +86,12 @@ void callback_stage_1(BigBrotherStateMachine::State)
     int destination = BACKBONE_SERVER;
     stage1_stop(networkbb_fd, stage);
 
-
-    //receive wave data size
-    if( (ret = recieve_header_and_stage1_fbb(networkbb_fd, wave_data_sz)) == FAILED){
-        std::cerr << "Recieving stage1 fbb\n";
-        exit(1);
-    }
-
-    // Wait for Stage 1 ACK
+    // Await the ACK 
     await_stage_ack();
-
-
-    //tell backbone server to send wave data to stage2
-    if( (ret = stage1_data_ready(networkbb_fd, destination, wave_data_sz)) == FAILED){
-        std::cerr << " Could not send stage1_data_ready message to backbone\n";
-        exit(1);
-    }
-
-    //DO WE WANT ANOTHER ACK HERE OR IS THAT OVERKILL
 
     // Asynchronously wait for Stage 2 to complete 
     auto stage2_thread = std::thread(await_stage2_done);
-    stage2_thread.detach();
+    stage2_thread.detach(); 
 }
 
 // State STAGE_2 callback.
@@ -130,6 +112,17 @@ void callback_stage_3(BigBrotherStateMachine::State)
     stage3_stop(networkbb_fd, stage);
 
     // Wait for Stage 3 ACK
+    await_stage_ack();
+
+    // Delete the shared memblocks
+    destroy_wav_mem_blk();
+    destroy_midi_mem_blk();
+
+    // Start Stage 1 recording
+    stage = BIG_BROTHER;
+    stage1_start(networkbb_fd, stage);
+
+    // Wait for Stage 1 ACK
     await_stage_ack();
 }
 

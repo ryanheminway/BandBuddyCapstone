@@ -49,6 +49,9 @@ static const char *alsa_capture_device_name = "plughw:CARD=pisound";
 // Cancel atomic: set high when the button is pressed
 static std::atomic_bool is_button_pressed;
 
+// Set high when the main thread is finished responding to a STOP command
+static std::atomic_bool main_thread_stop_status;
+
 // The mutex upon which to lock the condition variable
 static std::mutex is_button_pressed_mutex;
 
@@ -86,6 +89,15 @@ void await_button_press()
     is_button_pressed_cv.wait(lock, [&]() { return is_button_pressed.load(std::memory_order::memory_order_seq_cst); });
 }
 
+void await_network_backbone_notify_complete()
+{
+    // Acquire the mutex and await the condition variable
+    std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
+
+    // Lambda prevents spurious wakeups
+    is_button_pressed_cv.wait(lock, [&]() { return main_thread_stop_status.load(std::memory_order::memory_order_seq_cst); });
+}
+
 void *wait_button_pressed(void *thread_args)
 {
 #warning "Clean up wait_button_pressed function\n"
@@ -112,8 +124,9 @@ void *wait_button_pressed(void *thread_args)
             break;
         case STOP:
             stop_recording();
+
             //wait for main thread to finish
-            await_button_press();
+            await_network_backbone_notify_complete();
             send_ack(networkbb_fd, this_destination, this_stage_id);
             break;
         default:
@@ -277,12 +290,6 @@ int record_until_button_press()
     num_bytes_read = 0;
     while (num_bytes_read + BYTES_PER_PERIOD < WAV_BUFFER_SIZE && is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
-        // If the button has been pressed, stop recording
-        /*if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
-        {
-            break;
-        }*/
-
         // Await a new set of data
         if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
         {
@@ -314,7 +321,7 @@ int record_until_button_press()
     }
 
     // If the button has not been pressed, we ran out of space!
-    if (!is_button_pressed.load(std::memory_order::memory_order_relaxed))
+    if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
         fprintf(stderr, "%s", "Recording ran out of memory!\n");
         return 0;
@@ -609,9 +616,9 @@ int write_to_shared_mem()
     return 0;
 }
 
-int ping_big_brother()
+int ping_network_backbone()
 {
-    int destination = BIG_BROTHER;
+    int destination = BACKBONE_SERVER;
     int err = (stage1_data_ready(networkbb_fd, destination, num_bytes_read) == SUCCESS) ? 0 : 1;
     if (err)
     {
@@ -644,13 +651,10 @@ int main(int argc, char *argv[])
 
     //button has not been pressed before
     is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
+    main_thread_stop_status.store(false, std::memory_order::memory_order_seq_cst);
 
     while (1)
     {
-
-        //is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
-        await_button_press();
-
         // Init the capture handle
         err = init_capture_handle();
         if (err)
@@ -664,8 +668,7 @@ int main(int argc, char *argv[])
             return err;
         }
 
-        // Await a button press
-        //await_button_press();
+        await_button_press();
 
         // Record
         if ((err = record_until_button_press()))
@@ -680,11 +683,12 @@ int main(int argc, char *argv[])
         }
 
         // Inform the network backbone that data is ready
-        if ((err = ping_big_brother()))
+        if ((err = ping_network_backbone()))
         {
             break;
         }
 
+        main_thread_stop_status.store(true, std::memory_order_seq_cst);
         is_button_pressed_cv.notify_one();
         // !TEMP
         fprintf(stdout, "Num bytes read: %d\n", num_bytes_read);
