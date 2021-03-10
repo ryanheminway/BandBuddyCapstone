@@ -12,6 +12,7 @@ from .forms import GenreForm
 
 #coordinate with ryan
 genre_dict= {'rock': 0, "jazz": 1, "funk": 2, "pop": 3, "classical": 4}
+timbre_dict={'timbre1': 0, 'timbre2': 1, 'timbre3': 2, 'timbre4': 3, 'timbre5': 4}
 
 def update_genre (request):
     #have it send to stage 2 here
@@ -25,11 +26,11 @@ def update_genre (request):
         drums = True
     if request.POST.get('guitar','0') == 'on':
         guitar = True
-        
+
     if genre != '0':
         host = '127.0.0.1'
         port = 8080
-        #socket_fd = band_buddy_msg.connect_and_register(host, port, band_buddy_msg.WEB_SERVER_STAGE)    
+        socket_fd = band_buddy_msg.connect_and_register(host, port, band_buddy_msg.WEB_SERVER_STAGE)    
         print(genre)
         print(timbre)
         print(tempo)
@@ -37,7 +38,7 @@ def update_genre (request):
         print(drums)
         print(guitar)
         #print(genre_dict[genre])
-        #band_buddy_msg.send_webserver_data(socket_fd,genre_dict[genre],band_buddy_msg.STAGE2)
+        band_buddy_msg.send_webserver_data(socket_fd,genre_dict[genre], timbre_dict[timbre], int(tempo), float(temperature), drums, guitar, band_buddy_msg.STAGE2, band_buddy_msg.WEB_SERVER_STAGE)
 
     form = GenreForm(request.POST or None) 
 
