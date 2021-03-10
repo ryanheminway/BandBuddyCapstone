@@ -39,7 +39,7 @@
 // For now, hold 1024 periods in the mem buffer
 #define PERIODS_IN_WAV_BUFFER 1024
 #define WAV_BUFFER_SIZE BYTES_PER_PERIOD *PERIODS_IN_WAV_BUFFER
-static uint8_t buffer[WAV_BUFFER_SIZE];
+static uint8_t buffer[WAV_BUFFER_SIZE * 32];
 
 // The ALSA capture handle
 static snd_pcm_t *capture_handle;
@@ -480,6 +480,9 @@ int record_until_button_press()
 
 void async_playback_until_button_press()
 {
+    // !TEMP
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
     int err = 0;
     int num_bytes_written = 0;
     while (num_bytes_written + BYTES_PER_PERIOD < WAV_BUFFER_SIZE && is_button_pressed.load(std::memory_order::memory_order_relaxed))
@@ -527,7 +530,7 @@ void async_playback_until_button_press()
         }
 
         num_bytes_written += BYTES_PER_PERIOD;
-        fprintf(stdout, "bytes written: %d\n", num_bytes_written);
+        //fprintf(stdout, "bytes written: %d\n", num_bytes_written);
     }
 
     if ((err = snd_pcm_close(playback_handle)) < 0)
