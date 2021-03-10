@@ -67,7 +67,7 @@ class Stage2Handler():
 
     # Handles webserver data by either changing parameters as requested or sharing current parameter settings
     def handle_webserver_data(self, data):
-        pass
+        print("Got webserver message: ", data)
 
 
 def main():
