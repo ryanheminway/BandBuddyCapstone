@@ -14,7 +14,13 @@
 
 #define SYNC_BUFFER_SIZE (1024 * 1024 * 256)
 // The buffer into which to synchronize wav data
-static uint8_t sync_buffer[SYNC_BUFFER_SIZE];
+static uint8_t output_buffer_combined[SYNC_BUFFER_SIZE];
+// The buffer into which to write stereo drum data
+static uint8_t output_buffer_drum[SYNC_BUFFER_SIZE];
+// A buffer filled with zeros
+static uint8_t output_buffer_silence[SYNC_BUFFER_SIZE] = {0};
+// A pointer to the Stage 1 shared memory buffer
+static uint8_t* output_buffer_recorded;
 
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
@@ -51,6 +57,11 @@ static std::condition_variable is_button_pressed_cv;
 
 // Set high when listening thread gets a stage2_data_ready message
 static std::atomic_bool midi_data_ready;
+
+// High when the audio recorded during Stage 1 should be played.
+static std::atomic_bool output_recorded_audio;
+// High when the backing track received from Stage 2 should be played.
+static std::atomic_bool output_generated_audio;
 
 void await_network_backbone()
 {
@@ -192,6 +203,7 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
             norm_wav_min = wav_word_int;
         }
     }
+
     fprintf(stdout, "midi: [%d, %d]\twav: [%d, %d]\n", norm_midi_min, norm_midi_max, norm_wav_min, norm_wav_max);
 
     double norm_max_avg = (norm_midi_max + norm_wav_max / 2);
@@ -199,7 +211,10 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
     // Skip the headers - loop over the rest of the content
     for (int i = 44; i < midi_size; i += 2)
     {
-        int16_t midi_word_int = midi[i] | (midi[i + 1] << 8);
+        // Iterate over the drum data half as fast to simulate mono->stereo conversion
+        int midi_i = i / 2;
+
+        int16_t midi_word_int = midi[midi_i] | (midi[midi_i + 1] << 8);
         double midi_word = (double)midi_word_int;
         int16_t wav_word_int = wav[i] | (wav[i + 1] << 8);
         double wav_word = (double)wav_word_int;
@@ -210,41 +225,18 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
         double avg_word = (norm_midi_word + norm_wav_word) / 2;
         int16_t avg = (int16_t)avg_word;
 
-        sync_buffer[i - 44] = avg & 0xFF;
-        sync_buffer[i + 1 - 44] = (avg >> 8) & 0xFF;
-        //sync_buffer[i - 44] = wav[i];
-        //sync_buffer[i + 1 - 44] = wav[i + 1];
+        output_buffer_combined[i - 44] = avg & 0xFF;
+        output_buffer_combined[i + 1 - 44] = (avg >> 8) & 0xFF;
+        
+        // Also write the drum data to the drum output 
+        output_buffer_drum[i - 44] = avg & 0xFF;
+        output_buffer_drum[i + 1 - 44] = (avg >> 8) & 0xFF;
     }
 
+    // Update the recorded audio buffer pointer to point to the shared memory
+    output_buffer_recorded = midi;
+
     return 0;
-    // memcpy(sync_buffer, midi, midi_size);
-
-    // // For now, open the test file
-    // FILE* test_drums = fopen("/home/patch/BandBuddyCapstone/Firmware/code/stage3/mock/hcb_drums.wav", "r");
-    // if (!test_drums)
-    // {
-    //     fprintf(stderr, "%s\n", "The mock drum file (hbc_drums.wav) was not found! Did you forget to copy it into the stage3 mock folder?");
-    //     return 1;
-    // }
-
-    // uint8_t buffer[midi_size];
-    // fread(buffer, sizeof(uint8_t), midi_size, test_drums);
-
-    // for (int i = 44; i < midi_size; i += 2)
-    // {
-    //     int16_t shared_mem_word_int = shared_mem[i] | (shared_mem[i + 1] << 8);
-    //     double shared_mem_word = (double)shared_mem_word_int;
-    //     int16_t file_word_int = buffer[i] | (buffer[i + 1] << 8);
-    //     double file_word = (double)file_word_int;
-
-    //     double avg_float = (shared_mem_word + file_word) / 2.0;
-    //     int16_t avg = (int16_t)avg_float;
-
-    //     sync_buffer[i - 44] = avg & 0xFF;
-    //     sync_buffer[i + 1 - 44] = (avg >> 8) & 0xFF;
-    // }
-
-    // return 0;
 }
 
 static int init_capture_handle()
@@ -365,6 +357,7 @@ static int init_capture_handle()
 static int play_loop(int loop_size_bytes)
 {
     int sample_index = 0, err = 0;
+    uint8_t* buffer_to_play;
 
     while (sample_index < loop_size_bytes)
     {
@@ -372,6 +365,37 @@ static int play_loop(int loop_size_bytes)
         if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
         {
             return 1;
+        }
+
+        // Using the flags, determine which playback buffer to use
+        bool should_output_recorded = output_recorded_audio.load(std::memory_order::memory_order_relaxed);
+        bool should_output_generated = output_generated_audio.load(std::memory_order::memory_order_relaxed);
+
+        if (should_output_recorded) 
+        {
+            if (should_output_generated)
+            {
+                // Use both
+                buffer_to_play = output_buffer_combined;
+            }
+            else 
+            {
+                // Use just the recorded
+                buffer_to_play = output_buffer_recorded;
+            }
+        }
+        else 
+        {
+            if (should_output_generated)
+            {
+                // Use just the drums
+                buffer_to_play = output_buffer_drum;
+            }
+            else 
+            {
+                // Use silence
+                buffer_to_play = output_buffer_silence;
+            }
         }
 
         if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
@@ -399,7 +423,7 @@ static int play_loop(int loop_size_bytes)
         frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
 
         int frames_written;
-        if ((frames_written = snd_pcm_writei(playback_handle, sync_buffer + sample_index, FRAMES_PER_PERIOD)) != frames_to_deliver)
+        if ((frames_written = snd_pcm_writei(playback_handle, buffer_to_play + sample_index, FRAMES_PER_PERIOD)) != frames_to_deliver)
         {
             if (frames_written == -EPIPE)
             {
