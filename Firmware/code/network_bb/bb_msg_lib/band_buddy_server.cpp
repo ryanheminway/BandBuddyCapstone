@@ -162,6 +162,32 @@ int recieve_header_and_stage2_fbb(int &sockfd, uint32_t &midi_data_sz){
     return ret;
 }
 
+int recieve_header_and_stage1_fbb(int &sockfd, uint32_t &wave_data_sz){
+    int ret = FAILED;
+    int destination, cmd, stage_id, payload_size;
+    char buffer[1024];
+
+    ret = retrieve_header(buffer, sockfd);
+
+    if (ret == FAILED){
+        std::cout << "Failed to retrieve header\n";
+        return FAILED;
+    }
+
+    parse_header(buffer, destination, cmd, stage_id, payload_size);
+
+    //sanity check 
+    if( destination != BIG_BROTHER && cmd != STAGE1_DATA_READY){
+        std::cout << "Big brother cannot process this message\n";
+        return FAILED;
+    }
+    
+
+    ret = recieve_stage1_fbb(sockfd, payload_size, wave_data_sz);
+
+    return ret;
+}
+
 int recieve_and_send_webserver_fbb(int &sock_fd, int &payload_size, int &destination_socket)
 {
     int ret = FAILED;
@@ -211,3 +237,32 @@ int recieve_and_mem_shared_stage2_data(int &sock_fd, int &payload_size){
 
     return ret;
 } 
+
+int recieve_ack(int &sock_fd, int &stage_id){
+
+    int ret = FAILED;
+    int destination; 
+    int cmd; 
+    int payload_size;
+    int thi_stage_id; //do not really care where it came from
+
+    char buffer[1024];
+    ret = retrieve_header(buffer, sock_fd);
+    parse_header(buffer, destination, cmd, thi_stage_id, payload_size);
+
+    if(cmd != ACK || destination != stage_id || ret == FAILED){
+        std::cout << " Could not processed ACK\n";
+        return FAILED;
+    }
+
+    return SUCCESS;
+}
+
+
+int recieve_through_message(int &sock_fd, uint8_t *buff, int &payload_size){
+   int ret = FAILED; 
+
+   ret = retrieve_payload(sock_fd, payload_size, buff);
+
+   return ret;
+}  

@@ -7,4 +7,6 @@ class Stages(object):
     Stage2 = 1
     Stage3 = 2
     WebServer = 3
+    BIG_BROTHER = 4
+    BACKBONE_SERVER = 5
 
