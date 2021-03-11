@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/brick/bandbuddy/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
+sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
 import socket
 import flatbuffers
 import Server.Header.Cmds as cmds 

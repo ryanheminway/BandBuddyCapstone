@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/brick/bandbuddy/BandBuddyCapstone/Firmware/code/stage2')
+sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/stage2')
 import band_buddy_msg
 from django.shortcuts import render
 from django.views.generic import TemplateView, CreateView
