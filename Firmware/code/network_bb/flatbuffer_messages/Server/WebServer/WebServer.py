@@ -31,7 +31,28 @@ class WebServer(object):
             return self._tab.Get(flatbuffers.number_types.Uint32Flags, o + self._tab.Pos)
         return 0
 
-def Start(builder): builder.StartObject(1)
+    # WebServer
+    def Timbre(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Uint32Flags, o + self._tab.Pos)
+        return 0
+
+    # WebServer
+    def Tempo(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(8))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Uint32Flags, o + self._tab.Pos)
+        return 0
+
+    # WebServer
+    def Temperature(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(10))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
+        return 0.0
+
+def Start(builder): builder.StartObject(4)
 def WebServerStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -39,6 +60,18 @@ def AddGenre(builder, genre): builder.PrependUint32Slot(0, genre, 0)
 def WebServerAddGenre(builder, genre):
     """This method is deprecated. Please switch to AddGenre."""
     return AddGenre(builder, genre)
+def AddTimbre(builder, timbre): builder.PrependUint32Slot(1, timbre, 0)
+def WebServerAddTimbre(builder, timbre):
+    """This method is deprecated. Please switch to AddTimbre."""
+    return AddTimbre(builder, timbre)
+def AddTempo(builder, tempo): builder.PrependUint32Slot(2, tempo, 0)
+def WebServerAddTempo(builder, tempo):
+    """This method is deprecated. Please switch to AddTempo."""
+    return AddTempo(builder, tempo)
+def AddTemperature(builder, temperature): builder.PrependFloat64Slot(3, temperature, 0.0)
+def WebServerAddTemperature(builder, temperature):
+    """This method is deprecated. Please switch to AddTemperature."""
+    return AddTemperature(builder, temperature)
 def End(builder): return builder.EndObject()
 def WebServerEnd(builder):
     """This method is deprecated. Please switch to End."""

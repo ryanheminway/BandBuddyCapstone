@@ -9,4 +9,8 @@ class Cmds(object):
     Stage3_data_ready = 3
     Stage1_data = 4
     Web_server_data = 5
+    Stop = 6
+    Start = 7
+    Button_pressed = 8
+    ACK = 9
 

@@ -242,6 +242,9 @@ def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=Fals
         _sync_notes_with_onsets(combined_tap_sequence, onset_times)
         _sync_notes_with_onsets(combined_drum_sequence, onset_times)
 
+    return combined_drum_sequence
+
+    """ Disabling for now, may not need at all
     # (TODO) Add additional SF2 soundpacks for variation so its not always default
     full_tap_audio = librosa.util.normalize(midi_synth.fluidsynth(combined_tap_sequence, sample_rate=sr))
     full_drum_audio = librosa.util.normalize(midi_synth.fluidsynth(combined_drum_sequence, sample_rate=sr))
@@ -249,4 +252,10 @@ def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=Fals
     tap_and_onsets = mix_tracks(full_tap_audio, y[int(initial_start_time * sr):] / 2, stereo=True)
     drums_and_original = mix_tracks(full_drum_audio, y[int(initial_start_time * sr):] / 2, stereo=True)
 
-    return full_drum_audio, full_tap_audio, tap_and_onsets, drums_and_original, combined_drum_sequence
+    return full_drum_audio, full_tap_audio, tap_and_onsets, drums_and_original, combined_drum_sequence"""
+
+
+def midi_to_wav(data, sample_rate, sf2_path=None):
+    #wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate, sf2_path=sf2_path))
+    wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate))
+    return wav_data

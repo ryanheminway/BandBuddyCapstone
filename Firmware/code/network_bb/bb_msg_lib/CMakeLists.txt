@@ -9,4 +9,5 @@ add_library(
     band_buddy_server.cpp
 )
 
+target_link_libraries(msg_lib PUBLIC shared_mem)
 target_include_directories(msg_lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
