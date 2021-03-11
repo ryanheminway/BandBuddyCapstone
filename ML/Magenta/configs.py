@@ -104,7 +104,7 @@ CONFIG_MAP['groovae_2bar_tap_fixed_velocity'] = Config(
     hparams=merge_hparams(
         lstm_models.get_default_hparams(),
         HParams(
-            batch_size=1, # 512
+            batch_size=1,
             max_seq_len=16 * 2,  # 2 bars w/ 16 steps per bar
             z_size=256,
             enc_rnn_size=[512],

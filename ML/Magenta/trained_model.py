@@ -335,6 +335,7 @@ class TrainedModel(object):
         used.
     """
     tensors = self.decode_to_tensors(z, length, temperature, c_input)
+    print("decoded tensors before convert: ", tensors)
     if self._c_input is not None:
       return self._config.data_converter.from_tensors(
           tensors,
