@@ -36,7 +36,7 @@ static uint8_t* output_buffer_recorded;
 #define BYTES_PER_FRAME (BYTES_PER_SAMPLE * NUM_CHANNELS)
 
 // The number of frames to record per transfer
-#define FRAMES_PER_PERIOD 128
+#define FRAMES_PER_PERIOD 1024
 
 // The number of bytes in a period
 #define BYTES_PER_PERIOD (BYTES_PER_FRAME * FRAMES_PER_PERIOD)
@@ -44,9 +44,8 @@ static uint8_t* output_buffer_recorded;
 // The size of the internal ring buffer in the capture device: fit at least two periods
 #define PCM_RING_BUFFER_SIZE (BYTES_PER_FRAME * FRAMES_PER_PERIOD * 2)
 
-// // The buffer into which to put recorded audio from the user
-// #define RECORDING_BUFFER_SIZE (BYTES_PER_PERIOD * 8)
-// static uint8_t recording_buffer[RECORDING_BUFFER_SIZE];
+// // The buffer into which to put recorded audio from the user]
+static uint8_t recording_buffer[SYNC_BUFFER_SIZE];
 
 // // The head of the recording buffer 'queue'
 // static int recording_buffer_head;
@@ -585,11 +584,18 @@ static int play_loop(int loop_size_bytes)
     return 0;
 }
 
-static void async_record_until_button_press()
+static void async_record_until_button_press(int loop_size_bytes)
 {
     int err = 0;
-    int num_bytes_written = 0;
+    int num_bytes_read = 0;
     bool overtook = false;
+
+    if ((err = snd_pcm_start(capture_handle)) < 0)
+    {
+        print_error(err, "Could not start capture handle!");
+    }
+
+    fprintf(stdout, "%s\n", "Starting async record (not async rn  tho)");
     while (!is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
         // if (!overtook && num_bytes_written >= num_bytes_read)
@@ -608,36 +614,77 @@ static void async_record_until_button_press()
         //     fprintf(stdout, "bytes written: %d\n", num_bytes_written);
         // }
 
-        if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
-        {
-            print_error(err, "Poll failed!\n");
-            return;
-        }
+        // if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
+        // {
+        //     print_error(err, "Poll failed!\n");
+        //     return;
+        // }
         
-        int frames_to_deliver;
-        if ((frames_to_deliver = snd_pcm_avail_update(capture_handle)) < 0)
-        {
-            if (frames_to_deliver == -EPIPE)
-            {
-                print_error(frames_to_deliver, "An xrun occurred!");
-                snd_pcm_prepare(playback_handle);
-                continue;
-            }
-            else
-            {
-                print_error(frames_to_deliver, "An unknown error occurred!\n");
-                return;
-            }
-        }
+        // snd_pcm_sframes_t frames_to_deliver;
+        // if ((frames_to_deliver = snd_pcm_avail_update(capture_handle)) < FRAMES_PER_PERIOD)
+        // {
+        //     if (frames_to_deliver == -EPIPE)
+        //     {
+        //         print_error(frames_to_deliver, "An xrun occurred!");
+        //         snd_pcm_prepare(playback_handle);
+        //         continue;
+        //     }
+        //     else
+        //     {
+        //         print_error(frames_to_deliver, "An unknown error occurred!\n");
+        //         return;
+        //     }
+        // }
 
-        // Read one period, even if more is available
-        // if ((err = snd_pcm_readi(capture_handle, recording_buffer + recording_buffer_head, FRAMES_PER_PERIOD)) != FRAMES_PER_PERIOD)
+        // // Read one period, even if more is available
+        // if ((err = snd_pcm_readi(capture_handle, recording_buffer + num_bytes_read, frames_to_deliver)) != frames_to_deliver)
         // {
         //     print_error(err, "Frame read failed: %d!", err);
         //     return;
         // }        
 
-        // recording_buffer_head = (recording_buffer_head + BYTES_PER_PERIOD) % RECORDING_BUFFER_SIZE;
+        // num_bytes_read += frames_to_deliver * BYTES_PER_FRAME;
+        // fprintf(stdout, "num bytes read: %d\n", num_bytes_read);
+
+// Await a new set of data
+        if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
+        {
+            print_error(err, "Capture wait failed!");
+            return;
+        }
+
+        snd_pcm_sframes_t frames_available = snd_pcm_avail_update(capture_handle);
+        if (frames_available < FRAMES_PER_PERIOD)
+        {
+            fprintf(stderr, "Too few frames received: expected %d, received %lu!\n", FRAMES_PER_PERIOD, frames_available);
+            return;
+        }
+
+        // If there were more frames available than expected, report it - if this happens many times in a row, we might get an overrun
+        if (frames_available != FRAMES_PER_PERIOD)
+        {
+            fprintf(stderr, "Expected %d frames, but %lu are ready. Monitor for overflow?", FRAMES_PER_PERIOD, frames_available);
+        }
+
+        // Read one period, even if more is available
+        if ((err = snd_pcm_readi(capture_handle, recording_buffer + num_bytes_read, FRAMES_PER_PERIOD)) != FRAMES_PER_PERIOD)
+        {
+            print_error(err, "Frame read failed!");
+            return;
+        }
+
+        //fprintf(stdout, "Num_bytes_Read = %d\n", num_bytes_read);
+
+        num_bytes_read += BYTES_PER_PERIOD; 
+
+        if (num_bytes_read == BYTES_PER_PERIOD * 32)
+        {
+            std::thread t([&]() { 
+                    fprintf(stdout, "Starting to play: recorded %d bytes\n", num_bytes_read); 
+                    while (play_loop(loop_size_bytes) == 0); 
+                });
+            t.detach();
+        }
     }
 
     if ((err = snd_pcm_close(playback_handle)) < 0)
@@ -673,14 +720,15 @@ static int loop_audio_until_cancelled(int loop_size)
     } 
 
     // Spawn the producer thread
-    std::thread producer_thread(async_record_until_button_press);
+    //std::thread producer_thread(async_record_until_button_press);
     //producer_thread.detach();
 
     // Mark that audio is playing
     //is_audio_playing.store(true, std::memory_order::memory_order_seq_cst);
 
     // Loop until the button is pressed
-    while ((err = play_loop(loop_size)) == 0);
+    async_record_until_button_press(loop_size);
+    //while ((err = play_loop(loop_size)) == 0);
 
     // Clear the successful exit value from the error code - error handling needs to be done much better throughout Stages 1 and 3
     if (err == 1)
