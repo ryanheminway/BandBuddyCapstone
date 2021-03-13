@@ -38,7 +38,7 @@
 
 // For now, hold 1024 periods in the mem buffer
 #define PERIODS_IN_WAV_BUFFER 1024
-#define WAV_BUFFER_SIZE BYTES_PER_PERIOD *PERIODS_IN_WAV_BUFFER
+#define WAV_BUFFER_SIZE BYTES_PER_PERIOD * PERIODS_IN_WAV_BUFFER
 static uint8_t buffer[WAV_BUFFER_SIZE * 32];
 
 // The ALSA capture handle
@@ -157,7 +157,7 @@ int connect_networkbb()
     return connect_and_register(id, networkbb_fd);
 }
 
-static int init_capture_handle_playback()
+static int init_playback_handle()
 {
     int err;
 
@@ -228,6 +228,13 @@ static int init_capture_handle_playback()
     {
         fprintf(stderr, "Could not set frames/period: target %d, returned %lu!\n", FRAMES_PER_PERIOD, num_frames);
         return 1;
+    }
+
+    // Set the pcm ring buffer size
+    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, BYTES_PER_PERIOD)) < 0)
+    {
+        print_error(err, "Cannot set pcm ring buffer size!");
+        return err;
     }
 
     // Deliver the hardware params to the handle
@@ -418,10 +425,7 @@ int record_until_button_press()
         return err;
     }
 
-    // Spawn the consumer thread for async playback 
-    std::thread playback_thread(async_playback_until_button_press);
-    playback_thread.detach();
-
+    bool is_consumer_thread_spawned = false;
     num_bytes_read = 0;
     while (num_bytes_read + BYTES_PER_PERIOD < WAV_BUFFER_SIZE && is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
@@ -456,6 +460,13 @@ int record_until_button_press()
         //fprintf(stdout, "Num_bytes_Read = %d\n", num_bytes_read);
 
         num_bytes_read += BYTES_PER_PERIOD;
+
+        if (num_bytes_read == BYTES_PER_PERIOD * 32)
+        {
+            // Spawn the consumer thread for async playback 
+            std::thread playback_thread(async_playback_until_button_press);
+            playback_thread.detach();
+        }
     }
 
     // If the button has not been pressed, we ran out of space!
@@ -480,13 +491,29 @@ int record_until_button_press()
 
 void async_playback_until_button_press()
 {
-    // !TEMP
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    fprintf(stdout, "Playback spawned: read %d bytes\n", num_bytes_read);
 
     int err = 0;
     int num_bytes_written = 0;
+    bool overtook = false;
     while (num_bytes_written + BYTES_PER_PERIOD < WAV_BUFFER_SIZE && is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
+        if (!overtook && num_bytes_written >= num_bytes_read)
+        {
+            fprintf(stderr, "Write went too fast: wrote %d bytes.\n", num_bytes_written);
+            overtook = true;
+        }
+        else if (overtook && num_bytes_written < num_bytes_read)
+        {
+            fprintf(stderr, "%s\n", "write back behind read");
+            overtook = false;
+        }
+
+        if (!overtook) 
+        {
+            fprintf(stdout, "bytes written: %d\n", num_bytes_written);
+        }
+
         if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
         {
             print_error(err, "Poll failed!\n");
@@ -513,7 +540,7 @@ void async_playback_until_button_press()
         frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
 
         int frames_written;
-        if ((frames_written = snd_pcm_writei(playback_handle, buffer + num_bytes_written, FRAMES_PER_PERIOD)) != frames_to_deliver)
+        if ((frames_written = snd_pcm_writei(playback_handle, buffer + num_bytes_written, frames_to_deliver)) != frames_to_deliver)
         {
             if (frames_written == -EPIPE)
             {
@@ -529,14 +556,16 @@ void async_playback_until_button_press()
             }
         }
 
-        num_bytes_written += BYTES_PER_PERIOD;
-        //fprintf(stdout, "bytes written: %d\n", num_bytes_written);
+        num_bytes_written += frames_written * BYTES_PER_FRAME;
     }
 
     if ((err = snd_pcm_close(playback_handle)) < 0)
     {
         print_error(err, "Could not close the playback device!");
         return;
+    } else 
+    {
+        fprintf(stdout, "%s\n", "playback handle closed");
     }
 }
 
@@ -851,6 +880,8 @@ int main(int argc, char *argv[])
 
     while (1)
     {
+        await_button_press();
+
         // Init the capture handle
         err = init_capture_handle();
         if (err)
@@ -859,7 +890,7 @@ int main(int argc, char *argv[])
         }
 
          // Init the capture handle
-        err = init_capture_handle_playback();
+        err = init_playback_handle();
         if (err)
         {
             return err;
@@ -870,8 +901,6 @@ int main(int argc, char *argv[])
         {
             return err;
         }
-
-        await_button_press();
 
         // Record
         if ((err = record_until_button_press()))

@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include <iostream>
+#include <thread>
 
 #include "shared_mem.h"
 #include "band_buddy_server.h"
@@ -40,8 +41,23 @@ static uint8_t* output_buffer_recorded;
 // The number of bytes in a period
 #define BYTES_PER_PERIOD (BYTES_PER_FRAME * FRAMES_PER_PERIOD)
 
+// The size of the internal ring buffer in the capture device: fit at least two periods
+#define PCM_RING_BUFFER_SIZE (BYTES_PER_FRAME * FRAMES_PER_PERIOD * 2)
+
+// // The buffer into which to put recorded audio from the user
+// #define RECORDING_BUFFER_SIZE (BYTES_PER_PERIOD * 8)
+// static uint8_t recording_buffer[RECORDING_BUFFER_SIZE];
+
+// // The head of the recording buffer 'queue'
+// static int recording_buffer_head;
+// // The tail of the recording buffer 'queue'
+// static int recording_buffer_tail;
+
 // The ALSA playback handle
 static snd_pcm_t *playback_handle;
+
+// The ALSA capture handle
+static snd_pcm_t* capture_handle;
 
 // The ALSA capture device name to use
 static const char *alsa_capture_device_name = "plughw:CARD=pisound";
@@ -184,7 +200,8 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
 
     for (int i = 44; i < midi_size; i += 2)
     {
-        int16_t midi_word_int = midi[i] | (midi[i + 1] << 8);
+        int midi_index = i / 2;
+        int16_t midi_word_int = midi[midi_index] | (midi[midi_index + 1] << 8);
         int16_t wav_word_int = wav[i] | (wav[i + 1] << 8);
         if (midi_word_int > norm_midi_max)
         {
@@ -209,12 +226,15 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
     double norm_max_avg = (norm_midi_max + norm_wav_max / 2);
 
     // Skip the headers - loop over the rest of the content
-    for (int i = 44; i < midi_size; i += 2)
+    for (int i = 44, j = 42; i < midi_size; i += 2)
     {
         // Iterate over the drum data half as fast to simulate mono->stereo conversion
-        int midi_i = i / 2;
+        if (i % 4 == 0)
+        {
+            j += 2;
+        }
 
-        int16_t midi_word_int = midi[midi_i] | (midi[midi_i + 1] << 8);
+        int16_t midi_word_int = midi[j] | (midi[j + 1] << 8);
         double midi_word = (double)midi_word_int;
         int16_t wav_word_int = wav[i] | (wav[i + 1] << 8);
         double wav_word = (double)wav_word_int;
@@ -229,8 +249,8 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
         output_buffer_combined[i + 1 - 44] = (avg >> 8) & 0xFF;
         
         // Also write the drum data to the drum output 
-        output_buffer_drum[i - 44] = avg & 0xFF;
-        output_buffer_drum[i + 1 - 44] = (avg >> 8) & 0xFF;
+        output_buffer_drum[i - 44] = ((int)midi_word) & 0xFF;
+        output_buffer_drum[i + 1 - 44] = (((int)midi_word) >> 8) & 0xFF;
     }
 
     // Update the recorded audio buffer pointer to point to the shared memory
@@ -239,7 +259,7 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
     return 0;
 }
 
-static int init_capture_handle()
+static int init_playback_handle()
 {
     int err;
 
@@ -312,6 +332,14 @@ static int init_capture_handle()
         return 1;
     }
 
+    // Set the pcm ring buffer size
+    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, BYTES_PER_PERIOD * 2)) < 0)
+    {
+        print_error(err, "Cannot set pcm ring buffer size!");
+        return err;
+    }
+
+
     // Deliver the hardware params to the handle
     if ((err = snd_pcm_hw_params(playback_handle, hw_params)) < 0)
     {
@@ -353,6 +381,120 @@ static int init_capture_handle()
 
     return 0;
 }
+
+// Initalize the capture handle for audio capture. Returns 0 on success, errno on failure.
+int init_capture_handle()
+{
+    int err;
+
+    // Open the pisound audio device to capture
+    if ((err = snd_pcm_open(&capture_handle, alsa_capture_device_name, SND_PCM_STREAM_CAPTURE, SND_PCM_NONBLOCK)) < 0)
+    {
+        print_error(err, "Cannot open audio device \"%s\"!", alsa_capture_device_name);
+        return err;
+    }
+
+    // Allocate hardware parameters for this device
+    snd_pcm_hw_params_t *hw_params;
+    if ((err = snd_pcm_hw_params_malloc(&hw_params)) < 0)
+    {
+        print_error(err, "Cannot allocate hardware parameters!");
+        return err;
+    }
+
+    // Initialize the hardware params
+    if ((err = snd_pcm_hw_params_any(capture_handle, hw_params)) < 0)
+    {
+        print_error(err, "Cannot initialize hardware parameters!");
+        return err;
+    }
+
+    // Receive data in interleaved format (vs each channel in completion at a time) to directly write data as WAV
+    if ((err = snd_pcm_hw_params_set_access(capture_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0)
+    {
+        print_error(err, "Cannot set access type to interleaved!");
+        return err;
+    }
+
+    // Receive data as unsigned 24-bit frames
+    if ((err = snd_pcm_hw_params_set_format(capture_handle, hw_params, SND_PCM_FORMAT_S16)) < 0)
+    {
+        print_error(err, "Cannot set frame format to unsigned 24-bit!");
+        return err;
+    }
+
+    // Set the pcm ring buffer size
+    if ((err = snd_pcm_hw_params_set_buffer_size(capture_handle, hw_params, PCM_RING_BUFFER_SIZE)) < 0)
+    {
+        print_error(err, "Cannot set pcm ring buffer size!");
+        return err;
+    }
+
+    // Target 48KHz; if that isn't possible, something has gone wrong
+    unsigned int rate = SAMPLE_RATE;
+    if ((err = snd_pcm_hw_params_set_rate_near(capture_handle, hw_params, &rate, 0)) < 0)
+    {
+        print_error(err, "Could not set sample rate: pcm call failed!");
+        return err;
+    }
+    if (rate != SAMPLE_RATE)
+    {
+        fprintf(stderr, "Could not set sample rate: target %d, returned %d!\n", SAMPLE_RATE, rate);
+        return 1;
+    }
+
+    // Capture stereo audio
+    if ((err = snd_pcm_hw_params_set_channels(capture_handle, hw_params, 2)) < 0)
+    {
+        print_error(err, "Could not request stereo audio!");
+        return err;
+    }
+
+    // Deliver the hardware params to the handle
+    if ((err = snd_pcm_hw_params(capture_handle, hw_params)) < 0)
+    {
+        print_error(err, "Could not deliver hardware parameters to the capture device!");
+        return err;
+    }
+
+    // Free the hw params
+    snd_pcm_hw_params_free(hw_params);
+
+    // Allocate software parameters
+    snd_pcm_sw_params_t *sw_params;
+    if ((err = snd_pcm_sw_params_malloc(&sw_params)) < 0)
+    {
+        print_error(err, "Could not allocate software parameters for the capture device!");
+        return err;
+    }
+
+    // Initialize the software parameters
+    if ((err = snd_pcm_sw_params_current(capture_handle, sw_params)) < 0)
+    {
+        print_error(err, "Could not initialize the software parameters for the capture device!");
+        return err;
+    }
+
+    // Set the minimum available frames for a wakeup to the ring buffer size
+    if ((err = snd_pcm_sw_params_set_avail_min(capture_handle, sw_params, FRAMES_PER_PERIOD)) < 0)
+    {
+        print_error(err, "Could not set the frame wakeup limit!");
+        return err;
+    }
+
+    // Set the software parameters
+    if ((err = snd_pcm_sw_params(capture_handle, sw_params)) < 0)
+    {
+        print_error(err, "Could not deliver the software parameters to the capture device!");
+        return err;
+    }
+
+    // Free the sw params
+    snd_pcm_sw_params_free(sw_params);
+
+    return 0;
+}
+
 
 static int play_loop(int loop_size_bytes)
 {
@@ -423,7 +565,7 @@ static int play_loop(int loop_size_bytes)
         frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
 
         int frames_written;
-        if ((frames_written = snd_pcm_writei(playback_handle, buffer_to_play + sample_index, FRAMES_PER_PERIOD)) != frames_to_deliver)
+        if ((frames_written = snd_pcm_writei(playback_handle, buffer_to_play + sample_index, frames_to_deliver)) != frames_to_deliver)
         {
             if (frames_written == -EPIPE)
             {
@@ -443,7 +585,72 @@ static int play_loop(int loop_size_bytes)
     return 0;
 }
 
-int close_playback_handle()
+static void async_record_until_button_press()
+{
+    int err = 0;
+    int num_bytes_written = 0;
+    bool overtook = false;
+    while (!is_button_pressed.load(std::memory_order::memory_order_relaxed))
+    {
+        // if (!overtook && num_bytes_written >= num_bytes_read)
+        // {
+        //     fprintf(stderr, "Write went too fast: wrote %d bytes.\n", num_bytes_written);
+        //     overtook = true;
+        // }
+        // else if (overtook && num_bytes_written < num_bytes_read)
+        // {
+        //     fprintf(stderr, "%s\n", "write back behind read");
+        //     overtook = false;
+        // }
+
+        // if (!overtook) 
+        // {
+        //     fprintf(stdout, "bytes written: %d\n", num_bytes_written);
+        // }
+
+        if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
+        {
+            print_error(err, "Poll failed!\n");
+            return;
+        }
+        
+        int frames_to_deliver;
+        if ((frames_to_deliver = snd_pcm_avail_update(capture_handle)) < 0)
+        {
+            if (frames_to_deliver == -EPIPE)
+            {
+                print_error(frames_to_deliver, "An xrun occurred!");
+                snd_pcm_prepare(playback_handle);
+                continue;
+            }
+            else
+            {
+                print_error(frames_to_deliver, "An unknown error occurred!\n");
+                return;
+            }
+        }
+
+        // Read one period, even if more is available
+        // if ((err = snd_pcm_readi(capture_handle, recording_buffer + recording_buffer_head, FRAMES_PER_PERIOD)) != FRAMES_PER_PERIOD)
+        // {
+        //     print_error(err, "Frame read failed: %d!", err);
+        //     return;
+        // }        
+
+        // recording_buffer_head = (recording_buffer_head + BYTES_PER_PERIOD) % RECORDING_BUFFER_SIZE;
+    }
+
+    if ((err = snd_pcm_close(playback_handle)) < 0)
+    {
+        print_error(err, "Could not close the playback device!");
+        return;
+    } else 
+    {
+        fprintf(stdout, "%s\n", "playback handle closed");
+    }   
+}
+
+static int close_playback_handle()
 {
     // Flush the playback handle - this is a BUSY wait! Do better!
     //while (snd_pcm_drain(playback_handle) == -EAGAIN);
@@ -455,17 +662,25 @@ static int loop_audio_until_cancelled(int loop_size)
     int err;
 
     // Initialize the playback handle
-    if ((err = init_capture_handle()))
+    if ((err = init_playback_handle()))
     {
         return 1;
     }
+
+    if ((err = init_capture_handle()))
+    {
+        return 1;
+    } 
+
+    // Spawn the producer thread
+    std::thread producer_thread(async_record_until_button_press);
+    //producer_thread.detach();
 
     // Mark that audio is playing
     //is_audio_playing.store(true, std::memory_order::memory_order_seq_cst);
 
     // Loop until the button is pressed
-    while ((err = play_loop(loop_size)) == 0)
-        ;
+    while ((err = play_loop(loop_size)) == 0);
 
     // Clear the successful exit value from the error code - error handling needs to be done much better throughout Stages 1 and 3
     if (err == 1)
@@ -491,6 +706,10 @@ int main(int argc, char **argv)
     //signal(SIGINT, button_pressed);
     pthread_t thread;
     int err;
+
+    // !TEMP 
+    output_generated_audio.store(true, std::memory_order_seq_cst);
+    output_recorded_audio.store(true, std::memory_order_seq_cst);
 
     // Connect to the network backbone
     int failed = FAILED;
@@ -569,3 +788,27 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
+
+        // int bytes_to_deliver = frames_to_deliver * BYTES_PER_FRAME;
+        // int recording_queue_start = recording_buffer_tail;
+        // int recording_queue_end = (recording_queue_start + bytes_to_deliver) % RECORDING_BUFFER_SIZE;
+
+        // for (int i = recording_queue_start; i != recording_queue_end; i = (i + 2) % RECORDING_BUFFER_SIZE)
+        // {
+        //     // Grab one sample from the sync buffer and one sample from the recorded buffer
+        //     int16_t sample_to_play_int = buffer_to_play[sample_index] | (buffer_to_play[sample_index + 1] << 8);
+        //     int16_t sample_recorded_int = recording_buffer[i] | (recording_buffer[i + 1] << 8);
+
+        //     double sample_to_play = (double)sample_to_play_int;
+        //     double sample_recorded = (double)sample_recorded_int;
+
+        //     double avg = (sample_to_play + sample_recorded) / 2;
+        //     int16_t avg_int = (int16_t)avg;
+
+        //     // Put it back into the recording buffer
+        //     recording_buffer[i] = (avg_int & 0xFF);
+        //     recording_buffer[i + 1] = (avg_int >> 8) & 0xFF;
+        // }
+
+        // recording_buffer_tail = recording_queue_end;
