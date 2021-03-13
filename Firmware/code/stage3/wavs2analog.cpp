@@ -332,7 +332,7 @@ static int init_playback_handle()
     }
 
     // Set the pcm ring buffer size
-    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, BYTES_PER_PERIOD * 2)) < 0)
+    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, PCM_RING_BUFFER_SIZE)) < 0)
     {
         print_error(err, "Cannot set pcm ring buffer size!");
         return err;
@@ -563,22 +563,42 @@ static int play_loop(int loop_size_bytes)
         // Cap the frames to write
         frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
 
+        for (int i = sample_index; i < sample_index + (frames_to_deliver * BYTES_PER_FRAME); i += 2)
+        {
+            // Pull a sample from the record buffer and the buffer to play 
+            int16_t record_sample = recording_buffer[i] | (recording_buffer[i + 1] << 8);
+            int16_t sync_sample = buffer_to_play[i] | (buffer_to_play[i + 1] << 8);
+
+            int32_t sum = record_sample + sync_sample; 
+            int16_t avg = (int16_t)(sum / 2);
+            recording_buffer[i] = avg & 0xFF;
+            recording_buffer[i + 1] = (avg >> 8) & 0xFF;
+        }
+
         int frames_written;
-        if ((frames_written = snd_pcm_writei(playback_handle, buffer_to_play + sample_index, frames_to_deliver)) != frames_to_deliver)
+        if ((frames_written = snd_pcm_writei(playback_handle, recording_buffer + sample_index, frames_to_deliver)) != frames_to_deliver)
         {
             if (frames_written == -EPIPE)
             {
                 fprintf(stdout, "%s\n", "underrun!");
                 snd_pcm_prepare(playback_handle);
             }
+            else if (frames_written == -EAGAIN)
+            {
+                fprintf(stdout, "%s\n", "writei: EAGAIN!");
+            }
             else
             {
                 fprintf(stderr, "writei (wrote %d): expected to write %d frames, actually wrote %d!\n",
-                        sample_index, FRAMES_PER_PERIOD, frames_written);
-                return -frames_written;
+                        sample_index, frames_to_deliver, frames_written);
+                sample_index = BYTES_PER_FRAME * frames_written;
+                //return -frames_written;
             }
         }
-        sample_index += BYTES_PER_FRAME * frames_written;
+        else 
+        {
+            sample_index += BYTES_PER_FRAME * frames_written;
+        }
     }
 
     return 0;
@@ -589,6 +609,7 @@ static void async_record_until_button_press(int loop_size_bytes)
     int err = 0;
     int num_bytes_read = 0;
     bool overtook = false;
+    bool spawned_thread = false;
 
     if ((err = snd_pcm_start(capture_handle)) < 0)
     {
@@ -677,13 +698,19 @@ static void async_record_until_button_press(int loop_size_bytes)
 
         num_bytes_read += BYTES_PER_PERIOD; 
 
-        if (num_bytes_read == BYTES_PER_PERIOD * 32)
+        if (!spawned_thread && num_bytes_read == BYTES_PER_PERIOD * 32)
         {
             std::thread t([&]() { 
                     fprintf(stdout, "Starting to play: recorded %d bytes\n", num_bytes_read); 
                     while (play_loop(loop_size_bytes) == 0); 
                 });
             t.detach();
+            spawned_thread = true;
+        }
+
+        if (num_bytes_read >= loop_size_bytes)
+        {
+            num_bytes_read = 0;
         }
     }
 
