@@ -65,7 +65,6 @@ def initial_state_from_embedding(cell, z, name="z_initial_state"):
 """========================= END HELPERS =================================="""
 
 """========================= START DECODER =================================="""
-
 # TF 2.x implementation of Magenta's GrooveLstmDecoder (lstm_models.py/GrooveLstmDecoder)
 class GrooVAEDecoder(tfk.layers.Layer):
     def __init__(self, hparams, temperature, output_depth, is_training, name="decoder", **kwargs):
@@ -265,6 +264,7 @@ TF 2.x implementation of Magenta GrooVAE model. Uses Bidirectional LSTM Encoder 
 LSTM Decoder. Decoder is a bit more complicated so it is given its own class implementation.
 Decoder uses teacher forcing during training. 
 """
+
 class GrooVAE(tfk.Model):
     def __init__(self, hparams, output_depth, is_training, name="vae", **kwargs):
         super(GrooVAE, self).__init__(name=name, **kwargs)
@@ -316,18 +316,7 @@ class GrooVAE(tfk.Model):
     def call(self, x_input):
         #print("input seq: ", x_input)
         # Real Z distribution produced by encoder
-        (q_z, q_z_sample) = self.encode(x_input)
-        # #print("Got encoded: ", q_z)
-        # # Prior distribution
-        # p_z = tfp.distributions.MultivariateNormalDiag(loc=[0.] * self.hparams.z_size,
-        #                                                scale_diag=[1.] * self.hparams.z_size)
-        # # KL Divergence (measure relative difference between distributions)
-        # kl_div = tfp.distributions.kl_divergence(q_z, p_z)
-        # # (NOTE Ryan Heminway) Not quite sure what this free_nats business is about
-        # #       Copying from 1.x version
-        # free_nats = self.hparams.free_bits * tf.math.log(2.0)
-        # kl_cost = tf.maximum(kl_div - free_nats, 0)
-        # kl_cost = self.kl_weight * tf.reduce_mean(kl_cost)
+        (_, q_z_sample) = self.encode(x_input)
         # self.add_loss(lambda: kl_cost) # KL Divergence as loss term
         output_seq = self.decoder([q_z_sample, x_input])
         return output_seq
@@ -343,7 +332,6 @@ class GrooVAE(tfk.Model):
         kl_cost = tf.maximum(kl_div - free_nats, 0)
         kl_cost = self.kl_weight * tf.reduce_mean(kl_cost)
         return kl_cost
-
 
 """========================= END GROOVAE MODEL =================================="""
 

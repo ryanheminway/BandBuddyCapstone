@@ -7,9 +7,13 @@ import configs as cfg
 import data
 from base_model_v2 import GrooVAE
 
+# Disables cuda
+# (TODO) Try with cuda again once model.save is working. Currently CUDA doesn't like our training procedure
+os.environ["CUDA_VISIBLE_DEVICEs"] = "-1"
+
 
 # Custom loss term that returns a function which imitates the form loss(input, expected_output) which
-# is requires by Keras model.compile and subsequently model.build
+# is required by Keras model.compile and subsequently model.build
 def loss_term(input_seq, output_seq, seq_length, groove_model):
     (z, z_sample) = groove_model.encode(input_seq)
     reconstruct_loss = groove_model.decoder.reconstruction_loss(input_seq, output_seq, seq_length, z_sample)
@@ -18,20 +22,20 @@ def loss_term(input_seq, output_seq, seq_length, groove_model):
     # Separate function (not model.loss term) to avoid accessing graph tensor
     kl_loss = groove_model.kl_loss(z)
     total_vae_loss = r_loss + kl_loss
-
     return lambda input, output: total_vae_loss
 
 
 # Single step of training. Compute reconstruction loss, add to KL loss, and compute gradients
 # (TODO) I get errors when marking this as a tf.function
+# @tf.function
 def train_step(input_seq, output_seq, seq_length, groove_model, train_optimizer, train_loss_metric):
     with tf.GradientTape() as tape:
-        total_vae_loss = loss_term(input_seq, output_seq, seq_length, groove_model)
+        loss_fn = loss_term(input_seq, output_seq, seq_length, groove_model)
         # (TODO) hacky and dumb and I hate it
-        total_vae_loss = total_vae_loss(input_seq, output_seq)
-    gradients = tape.gradient(total_vae_loss, groove_model.trainable_variables)
+        loss_value = loss_fn(input_seq, output_seq)
+    gradients = tape.gradient(loss_value, groove_model.trainable_variables)
     train_optimizer.apply_gradients(zip(gradients, groove_model.trainable_variables))
-    train_loss_metric(total_vae_loss)
+    train_loss_metric(loss_value)
 
 
 """========================= END TRAINING FUNCTIONS =================================="""
@@ -52,7 +56,7 @@ config_update_map = {'train_examples_path': os.path.expanduser(data_record)}
 groovae_cfg = cfg.update_config(groovae_cfg, config_update_map)
 
 model = GrooVAE(groovae_cfg.hparams, data_converter.output_depth, True)
-model.build(input_shape=(1,32,27))
+
 optimizer = tfk.optimizers.Adam(lr)
 #model.compile(optimizer, loss=loss_term())
 #model.build(input_shape=(1,32,27))
@@ -151,14 +155,19 @@ for epoch in range(epochs):
         if step == 0:
             model.compile(optimizer, loss=loss_term(input_seq=input_sequence, output_seq=output_sequence, seq_length=sequence_length, groove_model=model))
 
-
         # Train step
         train_step(input_sequence, output_sequence, sequence_length, model, optimizer, loss_metric)
         elbo = -loss_metric.result()
         print('Epoch: {}, Train set ELBO: {}'.format(
               epoch, elbo))
         step += 1
+        # model.compile first to allow .build to work
+        # model.build to set input shapes for model.save
+        # (TODO) we call model.build but .save still fails saying we didn't set input shapes?
+        model.build(input_shape=(1, 32, 27))
+        #model.save("./model_test_saved/")
         if epoch % 10 == 0:
+            # (TODO) Sometimes this fails due to "folder: access denied"???
             model.save_weights("./model_test_checkpoint/groovae_ckpt")
         if (elbo > -50):
             model.save_weights("./model_test_checkpoint/groovae_ckpt")
