@@ -4,18 +4,11 @@ Author: Ryan Heminway
 Reimplementation of magenta/base_model.py to use Tensorflow 2.x rather than 1.x functionality.
 """
 import collections
-import os
 
 import tensorflow as tf
 import tensorflow_probability as tfp
 import tensorflow.keras as tfk
 import tensorflow_addons as tfa
-
-import configs
-import configs as cfg
-import data
-from NanoMagenta.nano_audio_utils import midi_to_wav
-import soundfile as sf
 
 
 """========================= START HELPERS =================================="""
@@ -290,6 +283,7 @@ class GrooVAE(tfk.Model):
     # Sequential API (Bidirectional LSTM) Encoder
     def encoder_z(self):
         layers = []
+        layers.append(tfk.layers.Input((32,27), batch_size=1))
         # enc_rnn_size = [512]
         lstm = tfk.layers.LSTM(self.hparams.enc_rnn_size[0], dropout=self.dropout_prob)
         layers.append(tfk.layers.Bidirectional(lstm))
@@ -323,183 +317,33 @@ class GrooVAE(tfk.Model):
         #print("input seq: ", x_input)
         # Real Z distribution produced by encoder
         (q_z, q_z_sample) = self.encode(x_input)
-        #print("Got encoded: ", q_z)
-        # Prior distribution
+        # #print("Got encoded: ", q_z)
+        # # Prior distribution
+        # p_z = tfp.distributions.MultivariateNormalDiag(loc=[0.] * self.hparams.z_size,
+        #                                                scale_diag=[1.] * self.hparams.z_size)
+        # # KL Divergence (measure relative difference between distributions)
+        # kl_div = tfp.distributions.kl_divergence(q_z, p_z)
+        # # (NOTE Ryan Heminway) Not quite sure what this free_nats business is about
+        # #       Copying from 1.x version
+        # free_nats = self.hparams.free_bits * tf.math.log(2.0)
+        # kl_cost = tf.maximum(kl_div - free_nats, 0)
+        # kl_cost = self.kl_weight * tf.reduce_mean(kl_cost)
+        # self.add_loss(lambda: kl_cost) # KL Divergence as loss term
+        output_seq = self.decoder([q_z_sample, x_input])
+        return output_seq
+
+    def kl_loss(self, z):
         p_z = tfp.distributions.MultivariateNormalDiag(loc=[0.] * self.hparams.z_size,
                                                        scale_diag=[1.] * self.hparams.z_size)
         # KL Divergence (measure relative difference between distributions)
-        kl_div = tfp.distributions.kl_divergence(q_z, p_z)
+        kl_div = tfp.distributions.kl_divergence(z, p_z)
         # (NOTE Ryan Heminway) Not quite sure what this free_nats business is about
         #       Copying from 1.x version
         free_nats = self.hparams.free_bits * tf.math.log(2.0)
         kl_cost = tf.maximum(kl_div - free_nats, 0)
         kl_cost = self.kl_weight * tf.reduce_mean(kl_cost)
-        self.add_loss(lambda: kl_cost) # KL Divergence as loss term
-        output_seq = self.decoder([q_z_sample, x_input])
-        return output_seq
+        return kl_cost
 
 
 """========================= END GROOVAE MODEL =================================="""
-
-"""========================= START TRAINING FUNCTIONS =================================="""
-
-# Reconstruction loss for decoder training
-def partial_vae_loss(input_seq, output_seq, seq_length, groove_model):
-    (_, z) = groove_model.encode(input_seq)
-    reconstruct_loss = groove_model.decoder.reconstruction_loss(input_seq, output_seq, seq_length, z)
-    r_loss = tf.reduce_mean(reconstruct_loss)
-    return r_loss
-
-
-# Single step of training. Compute reconstruction loss, add to KL loss, and compute gradients
-# (TODO) I get errors when marking this as a tf.function
-def train_step(input_seq, output_seq, seq_length, groove_model, train_optimizer, train_loss_metric):
-    with tf.GradientTape() as tape:
-        r_loss = partial_vae_loss(input_seq, output_seq, seq_length, groove_model)
-        kl_loss = tf.math.reduce_sum(groove_model.losses)  # vae.losses is a list
-        total_vae_loss = r_loss + kl_loss
-    gradients = tape.gradient(total_vae_loss, groove_model.trainable_variables)
-    train_optimizer.apply_gradients(zip(gradients, groove_model.trainable_variables))
-    train_loss_metric(total_vae_loss)
-
-
-"""========================= END TRAINING FUNCTIONS =================================="""
-
-"""========================= START TRAINING / MODEL PARAMS =================================="""
-
-epochs = 3  # (TODO) Arbitrarily low number for now, until training is working
-groovae_cfg = cfg.CONFIG_MAP['groovae_2bar_tap_fixed_velocity']
-lr = groovae_cfg.hparams.learning_rate
-data_converter = groovae_cfg.data_converter
-run_dir = "./../datasets/rundir/"
-run_dir = os.path.expanduser(run_dir)
-train_dir = os.path.join(run_dir, 'train')
-data_record = "./../datasets/rock.tfrecord"
-tf_file_reader = tf.data.TFRecordDataset
-file_reader = tf.compat.v1.python_io.tf_record_iterator
-config_update_map = {'train_examples_path': os.path.expanduser(data_record)}
-groovae_cfg = configs.update_config(groovae_cfg, config_update_map)
-
-model = GrooVAE(groovae_cfg.hparams, data_converter.output_depth, True)
-optimizer = tfk.optimizers.Adam(lr)
-model.compile(optimizer)
-#model.build(input_shape=(1,32,27))
-loss_metric = tfk.metrics.Mean() # Sum?
-
-"""========================= END TRAINING / MODEL PARAMS =================================="""
-
-"""========================= START DATA FUNCTIONS =================================="""
-
-def dataset_fn():
-    return data.get_dataset(
-        groovae_cfg,
-        tf_file_reader=tf_file_reader,
-        is_training=True,
-        cache_dataset=True)
-
-def _get_input_tensors(dataset, config):
-  """Get input tensors from dataset."""
-  batch_size = config.hparams.batch_size
-  iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
-  (input_sequence, output_sequence, control_sequence,
-   sequence_length) = iterator.get_next()
-  input_sequence.set_shape(
-      [batch_size, None, config.data_converter.input_depth])
-  output_sequence.set_shape(
-      [batch_size, None, config.data_converter.output_depth])
-  if not config.data_converter.control_depth:
-    control_sequence = None
-  else:
-    control_sequence.set_shape(
-        [batch_size, None, config.data_converter.control_depth])
-  sequence_length.set_shape([batch_size] + sequence_length.shape[1:].as_list())
-
-  return {
-      'input_sequence': input_sequence,
-      'output_sequence': output_sequence,
-      'control_sequence': control_sequence,
-      'sequence_length': sequence_length
-  }
-
-
-# "Fix" set of input tensors by reshaping according to depth and batch
-def resize_input_tensors(config, input_seq, output_seq, control_seq, seq_len):
-    batch_size = config.hparams.batch_size
-    input_seq.set_shape(
-        [batch_size, None, config.data_converter.input_depth])
-    output_seq.set_shape(
-        [batch_size, None, config.data_converter.output_depth])
-    if not config.data_converter.control_depth:
-        control_seq = None
-    else:
-        control_seq.set_shape(
-            [batch_size, None, config.data_converter.control_depth])
-    seq_len.set_shape([batch_size] + seq_len.shape[1:].as_list())
-
-    return {
-        'input_sequence': input_seq,
-        'output_sequence': output_seq,
-        'control_sequence': control_seq,
-        'sequence_length': seq_len
-    }
-
-# Get the learning rate at a given global step
-def get_lr(step, cfg):
-    lr = ((cfg.hparams.learning_rate - cfg.hparams.min_learning_rate) *
-          tf.pow(cfg.hparams.decay_rate, tf.cast(step, dtype=tf.float32)) + cfg.hparams.min_learning_rate)
-    return lr
-
-
-"""========================= END DATA FUNCTIONS =================================="""
-
-#print("INPUT DATA ? : ", _get_input_tensors(dataset_fn(), groovae_cfg))
-
-"""========================= START TRAIN LOOP =================================="""
-
-step = 0
-for epoch in range(epochs):
-    iterator = tf.compat.v1.data.make_one_shot_iterator(dataset_fn())
-    # Every epoch, loop over all batches in training
-    for batch in iterator:
-        batch_data = resize_input_tensors(groovae_cfg, batch[0], batch[1], batch[2], batch[3])
-        #print("INPUT SEQ: ", tf.shape(batch_data["input_sequence"]))
-
-        # Some data processing as in base_model.py/MusicVAE/_compute_model_loss
-        input_sequence = tf.cast(batch_data["input_sequence"], dtype=tf.float32)
-        output_sequence = tf.cast(batch_data["output_sequence"], dtype=tf.float32)
-        max_sequence_length = tf.minimum(tf.shape(output_sequence)[1], groovae_cfg.hparams.max_seq_len)
-        input_sequence = input_sequence[:, :max_sequence_length]
-        output_sequence = output_sequence[:, :max_sequence_length]
-        sequence_length = tf.minimum(batch_data["sequence_length"], max_sequence_length)
-        if (sequence_length != max_sequence_length):
-            print("Sequence length !! : ", sequence_length)
-
-        optimizer.lr.assign(get_lr(step, groovae_cfg))
-
-        # Train step
-        train_step(input_sequence, output_sequence, sequence_length, model, optimizer, loss_metric)
-        elbo = -loss_metric.result()
-        print('Epoch: {}, Train set ELBO: {}'.format(
-              epoch, elbo))
-        step += 1
-        if (elbo > -270):
-            break
-#result = model(batch_data)  # ?? I don't know how I am supposed to call model
-    #result = result.samples
-print("DONE TRAINING LOOP")
-
-# (TODO) this shit fails cuz the model isn't really set up for keras it seems
-
-#model.save("./saved_model")
-#loaded_model = tfk.models.load_model("./saved_model")
-
-#noteseq_result = groovae_cfg.data_converter.from_tensors(tensor_result)[0]
-#print("noteseq result: ", noteseq_result)
-#wav_results = midi_to_wav(noteseq_result, sample_rate=22050)
-#sf.write("model_out_drums.wav", wav_results, 22050, subtype='PCM_24')
-"""========================= END TRAIN LOOP =================================="""
-
-# generate .tflite file
-#converter = tf.lite.TFLiteConverter.from_keras_model(model)
-#tflite_save = converter.convert()
 

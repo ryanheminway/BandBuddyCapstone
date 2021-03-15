@@ -1,5 +1,4 @@
 import copy, librosa, numpy as np
-import nano_configs as configs
 import note_seq
 from note_seq import midi_synth
 from note_seq.protobuf import music_pb2
@@ -59,6 +58,12 @@ def mix_tracks(y1, y2, stereo=False):
 def drumify(s, model, temperature=1.0):
     encoding, mu, sigma = model.encode([s])
     decoded = model.decode(encoding, length=32, temperature=temperature)
+    return decoded[0]
+
+
+def drumify_v2(s, model, temperature=1.0):
+    _, encoding = model.encode([s])
+    decoded = model.decode(encoding, s, length=32, temperature=temperature)
     return decoded[0]
 
 
@@ -136,7 +141,7 @@ def make_tap_sequence(tempo, onset_times, onset_frames, onset_velocities,
 
 
 # Given a .wav file path, applies the Drumify model to the input track and outputs a drum track.
-def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=False, start_windows_on_downbeat=False):
+def audio_to_drum(y, sr, velocity_threshold, temperature, model, v2=False, force_sync=False, start_windows_on_downbeat=False):
     #y, sr = librosa.load(f)
     
     # pad the beginning to avoid errors with onsets right at the start
@@ -170,8 +175,9 @@ def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=Fals
 
     start_time += two_bar_length;
     end_time += two_bar_length
-
+    print("tap sequences: ", tap_sequences)
     while start_time < clip_length:
+        print("were here right?")
         start_sample = int(librosa.core.time_to_samples(start_time, sr=sr))
         end_sample = int(librosa.core.time_to_samples(start_time + two_bar_length, sr=sr))
         current_section = y[start_sample:end_sample]
@@ -224,7 +230,11 @@ def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=Fals
             if start_windows_on_downbeat:
                 note_start_time = _shift_notes_to_beginning(s)
 
-            h = drumify(s, model, temperature=temperature)
+            if v2:
+                h = drumify_v2(s, model, temperature)
+            else:
+                h = drumify(s, model, temperature=temperature)
+            print("Got drumify result: ", h)
             # Adjust drum output to input tempo
             h = change_tempo(h, s.tempos[0].qpm)
 
@@ -232,7 +242,9 @@ def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=Fals
                 _shift_notes_later(s, note_start_time)
 
             drum_seqs.append(h)
-        except:
+        except Exception as e:
+            raise e
+            print("got exception: ", e)
             continue
 
     combined_tap_sequence = start_notes_at_0(combine_sequences_with_lengths(tap_sequences, lengths))
@@ -256,6 +268,5 @@ def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=Fals
 
 
 def midi_to_wav(data, sample_rate, sf2_path=None):
-    #wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate, sf2_path=sf2_path))
-    wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate))
+    wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate, sf2_path=sf2_path))
     return wav_data
