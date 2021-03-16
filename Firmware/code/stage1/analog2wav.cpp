@@ -231,7 +231,7 @@ static int init_playback_handle()
     }
 
     // Set the pcm ring buffer size
-    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, BYTES_PER_PERIOD)) < 0)
+    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, BYTES_PER_PERIOD / 2)) < 0)
     {
         print_error(err, "Cannot set pcm ring buffer size!");
         return err;
@@ -461,7 +461,7 @@ int record_until_button_press()
 
         num_bytes_read += BYTES_PER_PERIOD;
 
-        if (num_bytes_read == BYTES_PER_PERIOD * 32)
+        if (num_bytes_read == BYTES_PER_PERIOD * 4)
         {
             // Spawn the consumer thread for async playback 
             std::thread playback_thread(async_playback_until_button_press);
