@@ -48,88 +48,70 @@ class LstmDecodeResults(collections.namedtuple('LstmDecodeResults',
   pass
 
 
-# Computes an initial RNN Cell state from embedding 'z'
-def initial_state_from_embedding(cell, z, name="z_initial_state"):
-    flat_state_sizes = tf.nest.flatten(cell.state_size)
-    z_initial_layer = tfk.layers.Dense(sum(flat_state_sizes),
-                                       activation=tf.tanh,
-                                       kernel_initializer=tf.random_normal_initializer(stddev=0.001),
-                                       name=name)
-    initial_state = tf.nest.pack_sequence_as(cell.get_initial_state(batch_size=z.shape[0], dtype=tf.float32),
-                                             tf.split(z_initial_layer(z),
-                                                      flat_state_sizes,
-                                                      axis=1))
-    return initial_state
-
-
 """========================= END HELPERS =================================="""
 
 """========================= START DECODER =================================="""
 # TF 2.x implementation of Magenta's GrooveLstmDecoder (lstm_models.py/GrooveLstmDecoder)
-class GrooVAEDecoder(tfk.layers.Layer):
+class GrooVAEDecoder(tfk.Model):
+    """ Setting up all TF structures in __init__ to avoid re-doing multiple times in "call" """
     def __init__(self, hparams, temperature, output_depth, is_training, name="decoder", **kwargs):
         super(GrooVAEDecoder, self).__init__(name=name, **kwargs)
         self.hparams = hparams
         self.max_seq_len = hparams.max_seq_len
         self.output_depth = output_depth
         self.temperature = temperature
-        self.sampler = None #  Diff sampler used in training vs inference
-        self.inp_shape = None # Diff input shape used in training vs inference (I think?)
         self.dropout_prob = (1 - self.hparams.dropout_keep_prob) if is_training else 0
+        # Initialize decoder RNN cells
         dec_rnn_size = hparams.dec_rnn_size # dec_rnn_size = [256, 256]
         dec_cells = []
         for i in range(len(dec_rnn_size)):
             lstm_cell = tfk.layers.LSTMCell(dec_rnn_size[i], dropout=self.dropout_prob)
             dec_cells.append(lstm_cell)
         self.dec_cell = tfk.layers.StackedRNNCells(dec_cells)
+        # Final fully-connected output layer
         self.output_layer = tfk.layers.Dense(self.output_depth, name="output_projection")
 
-    # initialize sampler for inference cases, given a latent distribution z
-    def init_sampler(self, z):
-        start_inputs = tf.zeros([self.hparams.batch_size, self.output_depth], dtype=tf.dtypes.float32)
-        # In the conditional case, also concatenate the Z.
-        start_inputs = tf.concat([start_inputs, z], axis=-1)
-        initialize_fn = lambda inputs: (tf.zeros([self.hparams.batch_size], tf.bool), start_inputs)
+        # Sampler helper using teacher forcing
+        self.sampler = tfa.seq2seq.TrainingSampler()
+        # Input shape for decoder: correct input shape? 1.x model it is (283,) (256 + 27)
+        self.inp_shape = (283,) # self.sampler.inputs.shape[2:] # doesn't exist
+        # Main decoder structure built using RNN cells, final output layer, and sampler
+        self.decoder = tfa.seq2seq.BasicDecoder(parallel_iterations=1,
+            input_shape=self.inp_shape,
+            cell=self.dec_cell,
+            sampler=self.sampler,
+            output_layer=self.output_layer)
 
-        sample_fn = lambda time, outputs, state: self._sample(outputs, self.temperature)
-        end_fn = (lambda x: False)
+        # Vars required to compute initial state from decoder RNN
+        self.flat_state_sizes = tf.nest.flatten(self.dec_cell.state_size)
+        self.z_initial_layer = tfk.layers.Dense(sum(self.flat_state_sizes),
+                                           activation=tf.tanh,
+                                           kernel_initializer=tf.random_normal_initializer(stddev=0.001),
+                                           name="z_initial_state")
 
-        def next_inputs_fn(time, outputs, state, sample_ids):
-            del outputs
-            finished = end_fn(sample_ids)
-            next_inputs = tf.concat([sample_ids, z], axis=-1)
-            return (finished, next_inputs, state)
-
-        # Custom sampler, no teacher forcing when we are sampling. Not used in training
-        sampler = tfa.seq2seq.CustomSampler(
-            initialize_fn=initialize_fn, sample_fn=sample_fn,
-            next_inputs_fn=next_inputs_fn, sample_ids_shape=[self.output_depth],
-            sample_ids_dtype=tf.dtypes.float32)
-
-        self.sampler = sampler
-        self.inp_shape = start_inputs.shape[1:]
+    # Computes an initial RNN Cell state from embedding 'z'
+    def initial_state_from_embedding(self, z):
+        initial_state = tf.nest.pack_sequence_as(self.dec_cell.get_initial_state(batch_size=z.shape[0], dtype=tf.float32),
+                                                 tf.split(self.z_initial_layer(z),
+                                                          self.flat_state_sizes,
+                                                          axis=1))
+        return initial_state
 
     # Decodes from sample from latent vector z and decoder input x_input
     # CALL_INPUTS = [z, x_input]
     def call(self, call_inputs):
         z = call_inputs[0]
         x_input = call_inputs[1]
-        self.init_sampler(z)
-        input_shape = self.inp_shape
 
-        init_state = initial_state_from_embedding(self.dec_cell, z)
+        # Get an initial state for decoder based on latent distribution
+        init_state = self.initial_state_from_embedding(z)
         #print("INIT STATE: ", init_state)
         #print("Z: ", z)
-        #print("INPUT SHAPE: ", input_shape)
         #print("X INPUT: ", x_input)
 
-        decoder = tfa.seq2seq.BasicDecoder(parallel_iterations=1,
-            input_shape=input_shape,
-            cell=self.dec_cell,
-            sampler=self.sampler,
-            output_layer=self.output_layer)
+        # Decode input
         final_output, final_state, final_lengths = tfa.seq2seq.dynamic_decode(
-            decoder,
+            self.decoder,
             maximum_iterations=self.max_seq_len,
             swap_memory=True,
             scope='decoder',
@@ -146,120 +128,139 @@ class GrooVAEDecoder(tfk.layers.Layer):
 
         return results
 
-    # Generate sample from decoder based on latent vector z
-    def sample(self, z):
-        start_inputs = tf.zeros([self.hparams.batch_size, self.output_depth], dtype=tf.dtypes.float32)
-        # In the conditional case, also concatenate the Z.
-        start_inputs = tf.concat([start_inputs, z], axis=-1)
-        initialize_fn = lambda: (tf.zeros([1], tf.bool), start_inputs)
+    # (TODO) Currently unclear if any of this stuff is necessary
+    # # initialize sampler for inference cases, given a latent distribution z
+    # def init_sampler(self, z):
+    #     start_inputs = tf.zeros([self.hparams.batch_size, self.output_depth], dtype=tf.dtypes.float32)
+    #     # In the conditional case, also concatenate the Z.
+    #     start_inputs = tf.concat([start_inputs, z], axis=-1)
+    #     initialize_fn = lambda inputs: (tf.zeros([self.hparams.batch_size], tf.bool), start_inputs)
+    #
+    #     sample_fn = lambda time, outputs, state: self._sample(outputs, self.temperature)
+    #     end_fn = (lambda x: False)
+    #
+    #     def next_inputs_fn(time, outputs, state, sample_ids):
+    #         del outputs
+    #         finished = end_fn(sample_ids)
+    #         next_inputs = tf.concat([sample_ids, z], axis=-1)
+    #         return (finished, next_inputs, state)
+    #
+    #     # Custom sampler, no teacher forcing when we are sampling. Not used in training
+    #     sampler = tfa.seq2seq.CustomSampler(
+    #         initialize_fn=initialize_fn, sample_fn=sample_fn,
+    #         next_inputs_fn=next_inputs_fn, sample_ids_shape=[self.output_depth],
+    #         sample_ids_dtype=tf.dtypes.float32)
+    #
+    #     self.sampler = sampler
+    #     self.inp_shape = start_inputs.shape[1:]
 
-        sample_fn = lambda time, outputs, state: self._sample(outputs, self.temperature)
-        end_fn = (lambda x: False)
+    # # Generate sample from decoder based on latent vector z
+    # def sample(self, z):
+    #     start_inputs = tf.zeros([self.hparams.batch_size, self.output_depth], dtype=tf.dtypes.float32)
+    #     # In the conditional case, also concatenate the Z.
+    #     start_inputs = tf.concat([start_inputs, z], axis=-1)
+    #     initialize_fn = lambda: (tf.zeros([1], tf.bool), start_inputs)
+    #
+    #     sample_fn = lambda time, outputs, state: self._sample(outputs, self.temperature)
+    #     end_fn = (lambda x: False)
+    #
+    #     def next_inputs_fn(time, outputs, state, sample_ids):
+    #         del outputs
+    #         finished = end_fn(sample_ids)
+    #         next_inputs = tf.concat([sample_ids, z], axis=-1)
+    #         return (finished, next_inputs, state)
+    #
+    #     # Custom sampler, no teacher forcing when we are sampling. Not used in training
+    #     sampler = tfa.seq2seq.CustomSampler(
+    #         initialize_fn=initialize_fn, sample_fn=sample_fn,
+    #         next_inputs_fn=next_inputs_fn, sample_ids_shape=[self.output_depth],
+    #         sample_ids_dtype=tf.dtypes.float32)
+    #
+    #     self.sampler = sampler
+    #     self.input_shape = start_inputs.shape[1:]
+    #     decode_results = self.call([z, start_inputs])
+    #
+    #     return decode_results.samples
 
-        def next_inputs_fn(time, outputs, state, sample_ids):
-            del outputs
-            finished = end_fn(sample_ids)
-            next_inputs = tf.concat([sample_ids, z], axis=-1)
-            return (finished, next_inputs, state)
+    # def _sample(self, rnn_output, temperature=1.0):
+    #     output_hits, output_velocities, output_offsets = tf.split(
+    #         rnn_output, 3, axis=1)
+    #
+    #     output_velocities = tf.sigmoid(output_velocities)
+    #     output_offsets = tf.tanh(output_offsets)
+    #
+    #     hits_sampler = tfp.distributions.Bernoulli(
+    #         logits=output_hits / temperature, dtype=tf.dtypes.float32)
+    #
+    #     output_hits = hits_sampler.sample()
+    #     return tf.concat([output_hits, output_velocities, output_offsets], axis=1)
 
-        # Custom sampler, no teacher forcing when we are sampling. Not used in training
-        sampler = tfa.seq2seq.CustomSampler(
-            initialize_fn=initialize_fn, sample_fn=sample_fn,
-            next_inputs_fn=next_inputs_fn, sample_ids_shape=[self.output_depth],
-            sample_ids_dtype=tf.dtypes.float32)
+""" ======================= DECODER LOSS HELPERS ========================= """
+def _activate_outputs(flat_rnn_output):
+    output_hits, output_velocities, output_offsets = tf.split(
+        flat_rnn_output, 3, axis=1)
 
-        self.sampler = sampler
-        self.input_shape = start_inputs.shape[1:]
-        decode_results = self.call([z, start_inputs])
+    output_hits = tf.sigmoid(output_hits)
+    output_velocities = tf.sigmoid(output_velocities)
+    output_offsets = tf.tanh(output_offsets)
 
-        return decode_results.samples
+    return output_hits, output_velocities, output_offsets
 
-    def _activate_outputs(self, flat_rnn_output):
-        output_hits, output_velocities, output_offsets = tf.split(
-            flat_rnn_output, 3, axis=1)
+def _flat_reconstruction_loss(flat_x_target, flat_rnn_output):
+    # flat_x_target is by default shape (1,27), [on/offs... vels...offsets...]
+    # split into 3 equal length vectors
+    target_hits, target_velocities, target_offsets = tf.split(
+        flat_x_target, 3, axis=1)
 
-        output_hits = tf.sigmoid(output_hits)
-        output_velocities = tf.sigmoid(output_velocities)
-        output_offsets = tf.tanh(output_offsets)
+    output_hits, output_velocities, output_offsets = _activate_outputs(
+        flat_rnn_output)
 
-        return output_hits, output_velocities, output_offsets
+    hits_loss = tf.reduce_sum(tf.compat.v1.losses.log_loss(
+        labels=target_hits, predictions=output_hits,
+        reduction=tf.losses.Reduction.NONE), axis=1)
 
-    def _flat_reconstruction_loss(self, flat_x_target, flat_rnn_output):
-        # flat_x_target is by default shape (1,27), [on/offs... vels...offsets...]
-        # split into 3 equal length vectors
-        target_hits, target_velocities, target_offsets = tf.split(
-            flat_x_target, 3, axis=1)
+    velocities_loss = tf.reduce_sum(tf.compat.v1.losses.mean_squared_error(
+        target_velocities, output_velocities,
+        reduction=tf.losses.Reduction.NONE), axis=1)
 
-        output_hits, output_velocities, output_offsets = self._activate_outputs(
-            flat_rnn_output)
+    offsets_loss = tf.reduce_sum(tf.compat.v1.losses.mean_squared_error(
+        target_offsets, output_offsets,
+        reduction=tf.losses.Reduction.NONE), axis=1)
 
-        hits_loss = tf.reduce_sum(tf.compat.v1.losses.log_loss(
-            labels=target_hits, predictions=output_hits,
-            reduction=tf.losses.Reduction.NONE), axis=1)
+    loss = hits_loss + velocities_loss + offsets_loss
 
-        velocities_loss = tf.reduce_sum(tf.compat.v1.losses.mean_squared_error(
-            target_velocities, output_velocities,
-            reduction=tf.losses.Reduction.NONE), axis=1)
+    return loss
 
-        offsets_loss = tf.reduce_sum(tf.compat.v1.losses.mean_squared_error(
-            target_offsets, output_offsets,
-            reduction=tf.losses.Reduction.NONE), axis=1)
+# Compute loss term for how well decoder was able to properly construct target output sequence
+def reconstruction_loss(model, x_input, x_target, x_length, z):
+    batch_size = int(x_input.shape[0])
+    # print("BATCH_SIZE IN REC LOSS: ", batch_size)
 
-        loss = hits_loss + velocities_loss + offsets_loss
+    repeated_z = tf.tile(
+        tf.expand_dims(z, axis=1), [1, tf.shape(x_input)[1], 1])
+    x_input = tf.concat([x_input, repeated_z], axis=2)
 
-        return loss
+    decode_results = model.call([z, x_input])
+    flat_x_target = flatten_maybe_padded_sequences(x_target, x_length)
+    flat_rnn_output = flatten_maybe_padded_sequences(
+        decode_results.rnn_output, x_length)
+    r_loss = _flat_reconstruction_loss(
+        flat_x_target, flat_rnn_output)
 
-    def _sample(self, rnn_output, temperature=1.0):
-        output_hits, output_velocities, output_offsets = tf.split(
-            rnn_output, 3, axis=1)
+    # Sum loss over sequences.
+    cum_x_len = tf.concat([(0,), tf.cumsum(x_length)], axis=0)
+    r_losses = []
+    for i in range(batch_size):
+        b, e = cum_x_len[i], cum_x_len[i + 1]
+        r_losses.append(tf.reduce_sum(r_loss[b:e]))
+    r_loss = tf.stack(r_losses)
 
-        output_velocities = tf.sigmoid(output_velocities)
-        output_offsets = tf.tanh(output_offsets)
+    return r_loss
 
-        hits_sampler = tfp.distributions.Bernoulli(
-            logits=output_hits / temperature, dtype=tf.dtypes.float32)
-
-        output_hits = hits_sampler.sample()
-        return tf.concat([output_hits, output_velocities, output_offsets], axis=1)
-
-    # Compute loss term for how well decoder was able to properly construct target output sequence
-    def reconstruction_loss(self, x_input, x_target, x_length, z):
-        batch_size = int(x_input.shape[0])
-        #print("BATCH_SIZE IN REC LOSS: ", batch_size)
-        
-        repeated_z = tf.tile(
-            tf.expand_dims(z, axis=1), [1, tf.shape(x_input)[1], 1])
-        x_input = tf.concat([x_input, repeated_z], axis=2)
-
-        # (NOTE) removed Control input from here. Appeared to be "None" in all contexts. Do we need it?
-
-        # Use teacher forcing
-        self.sampler = tfa.seq2seq.TrainingSampler()
-        # Correct input shape? 1.x model it is (283,) (256 + 27)
-        self.inp_shape = (283,) # self.sampler.inputs.shape[2:] # doesn't exist
-
-        decode_results = self.call([z, x_input])
-        flat_x_target = flatten_maybe_padded_sequences(x_target, x_length)
-        flat_rnn_output = flatten_maybe_padded_sequences(
-            decode_results.rnn_output, x_length)
-        r_loss = self._flat_reconstruction_loss(
-            flat_x_target, flat_rnn_output)
-
-        # Sum loss over sequences.
-        cum_x_len = tf.concat([(0,), tf.cumsum(x_length)], axis=0)
-        r_losses = []
-        for i in range(batch_size):
-            b, e = cum_x_len[i], cum_x_len[i + 1]
-            r_losses.append(tf.reduce_sum(r_loss[b:e]))
-        r_loss = tf.stack(r_losses)
-
-        return r_loss
-
-
+""" ======================= END DECODER LOSS CALC ======================== """
 """========================= END DECODER =================================="""
 
 """========================= START ENCODER ================================"""
-
 class GrooVAEEncoder(tfk.Model):
     def __init__(self, hparams, is_training, name="encoder", **kwargs):
         super(GrooVAEEncoder, self).__init__(name=name, **kwargs)
@@ -267,10 +268,13 @@ class GrooVAEEncoder(tfk.Model):
         # using 1 - hparams.dropout because Keras dropout is inverse of old rnn.DropoutWrapper
         self.dropout_prob = (1 - self.hparams.dropout_keep_prob) if is_training else 0
 
-    # Build the model, defining structures required for forward pass
+    # (TODO) This automatically gets called for this model, the encoder. When I tried to do same pattern with decoder,
+    #       it didn't get automatically called? Had to initialize everything in __init__ instead
+    # Build the model, defining structures required for forward pass. Automatically called by 'Call'
     def build(self, input_shape):
+        print("encoder build got input shape: ", input_shape)
         layers = []
-        layers.append(tfk.layers.Input((32,27), batch_size=1))
+        layers.append(tfk.layers.Input((input_shape[1], input_shape[2]), batch_size=input_shape[0]))
         # enc_rnn_size = [512]
         lstm = tfk.layers.LSTM(self.hparams.enc_rnn_size[0], dropout=self.dropout_prob)
         layers.append(tfk.layers.Bidirectional(lstm))

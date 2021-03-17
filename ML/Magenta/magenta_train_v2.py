@@ -5,7 +5,7 @@ import tensorflow.keras as tfk
 
 import configs as cfg
 import data
-from base_model_v2 import GrooVAE
+from base_model_v2 import GrooVAE, reconstruction_loss
 
 # Disables cuda
 # (TODO) Try with cuda again once model.save is working. Currently CUDA doesn't like our training procedure
@@ -17,7 +17,7 @@ os.environ["CUDA_VISIBLE_DEVICEs"] = "-1"
 @tf.function
 def loss_term(input_seq, output_seq, seq_length, groove_model):
     (z, z_sample) = groove_model.encoder(input_seq)
-    reconstruct_loss = groove_model.decoder.reconstruction_loss(input_seq, output_seq, seq_length, z_sample)
+    reconstruct_loss = reconstruction_loss(groove_model.decoder, input_seq, output_seq, seq_length, z_sample)
     r_loss = tf.reduce_mean(reconstruct_loss)
     #kl_loss = tf.math.reduce_sum(groove_model.losses)  # vae.losses is a list
     # Separate function (not model.loss term) to avoid accessing graph tensor

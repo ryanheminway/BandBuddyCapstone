@@ -19,7 +19,7 @@ trained = t2.TrainedModel(groovae_cfg, new_model, 1, "./model_test_checkpoint/")
 temperature = 0.8
 velocity_threshold = 0.08
 
-f = '../../Data/ryan_is_no_joe.wav'
+f = '../../Data/footsteps.wav'
 y, sr = librosa.load(f)
 print("Loaded wav data: ", y)
 print("Length of wav data: ", len(y))

@@ -136,7 +136,9 @@ class TrainedModel(object):
       for i, t in enumerate(control_tensors):
         controls_array[i, :len(t)] = t
 
-    return self.model.encode(inputs_array)
+    self.inputs_array = inputs_array
+
+    return self.model.encoder(inputs_array)
 
   def decode(self, z, x_input, length=None, temperature=1.0, c_input=None):
     """Decodes a collection of latent vectors into NoteSequences.
@@ -154,7 +156,9 @@ class TrainedModel(object):
       ValueError: If `length` is not specified and an end token is not being
         used.
     """
-    tensors = self.decode_to_tensors(z, x_input, length, temperature, c_input)
+    #x_input = self._config.data_converter.to_tensors(x_input)
+    #x_input = tf.cast(x_input, dtype=tf.float32)
+    tensors = self.decode_to_tensors(z, self.inputs_array, length, temperature, c_input)
     return self._config.data_converter.from_tensors(tensors.samples)
 
   def decode_to_tensors(self, z, x_input, length=None, temperature=1.0, c_input=None,
