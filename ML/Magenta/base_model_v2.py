@@ -60,6 +60,7 @@ class GrooVAEDecoder(tfk.Model):
         self.max_seq_len = hparams.max_seq_len
         self.output_depth = output_depth
         self.temperature = temperature
+        self.is_training = is_training
         self.dropout_prob = (1 - self.hparams.dropout_keep_prob) if is_training else 0
         # Initialize decoder RNN cells
         dec_rnn_size = hparams.dec_rnn_size # dec_rnn_size = [256, 256]
@@ -109,6 +110,17 @@ class GrooVAEDecoder(tfk.Model):
         #print("Z: ", z)
         #print("X INPUT: ", x_input)
 
+        # On inference cases, we need to use a new sampler, and re-init decoder. Bit hacky but necessary
+        if not self.is_training:
+            self.init_sampler(z)
+            # Main decoder structure built using RNN cells, final output layer, and sampler
+            # Rebuild with new sampler
+            self.decoder = tfa.seq2seq.BasicDecoder(parallel_iterations=1,
+                                                    input_shape=self.inp_shape,
+                                                    cell=self.dec_cell,
+                                                    sampler=self.sampler,
+                                                    output_layer=self.output_layer)
+
         # Decode input
         final_output, final_state, final_lengths = tfa.seq2seq.dynamic_decode(
             self.decoder,
@@ -129,30 +141,40 @@ class GrooVAEDecoder(tfk.Model):
         return results
 
     # (TODO) Currently unclear if any of this stuff is necessary
-    # # initialize sampler for inference cases, given a latent distribution z
-    # def init_sampler(self, z):
-    #     start_inputs = tf.zeros([self.hparams.batch_size, self.output_depth], dtype=tf.dtypes.float32)
-    #     # In the conditional case, also concatenate the Z.
-    #     start_inputs = tf.concat([start_inputs, z], axis=-1)
-    #     initialize_fn = lambda inputs: (tf.zeros([self.hparams.batch_size], tf.bool), start_inputs)
-    #
-    #     sample_fn = lambda time, outputs, state: self._sample(outputs, self.temperature)
-    #     end_fn = (lambda x: False)
-    #
-    #     def next_inputs_fn(time, outputs, state, sample_ids):
-    #         del outputs
-    #         finished = end_fn(sample_ids)
-    #         next_inputs = tf.concat([sample_ids, z], axis=-1)
-    #         return (finished, next_inputs, state)
-    #
-    #     # Custom sampler, no teacher forcing when we are sampling. Not used in training
-    #     sampler = tfa.seq2seq.CustomSampler(
-    #         initialize_fn=initialize_fn, sample_fn=sample_fn,
-    #         next_inputs_fn=next_inputs_fn, sample_ids_shape=[self.output_depth],
-    #         sample_ids_dtype=tf.dtypes.float32)
-    #
-    #     self.sampler = sampler
-    #     self.inp_shape = start_inputs.shape[1:]
+    # initialize sampler for inference cases, given a latent distribution z
+    def init_sampler(self, z):
+        start_inputs = tf.zeros([self.hparams.batch_size, self.output_depth], dtype=tf.dtypes.float32)
+        # In the conditional case, also concatenate the Z.
+        start_inputs = tf.concat([start_inputs, z], axis=-1)
+        initialize_fn = lambda inputs: (tf.zeros([self.hparams.batch_size], tf.bool), start_inputs)
+        sample_fn = lambda time, outputs, state: self._sample(outputs, self.temperature)
+        end_fn = (lambda x: False)
+        def next_inputs_fn(time, outputs, state, sample_ids):
+            del outputs
+            finished = end_fn(sample_ids)
+            next_inputs = tf.concat([sample_ids, z], axis=-1)
+            return (finished, next_inputs, state)
+
+        # Custom sampler, no teacher forcing when we are sampling. Not used in training
+        sampler = tfa.seq2seq.CustomSampler(
+            initialize_fn=initialize_fn, sample_fn=sample_fn,
+            next_inputs_fn=next_inputs_fn, sample_ids_shape=[self.output_depth],
+            sample_ids_dtype=tf.dtypes.float32)
+
+        self.sampler = sampler
+        self.inp_shape = start_inputs.shape[1:]
+
+    def _sample(self, rnn_output, temperature=1.0):
+        output_hits, output_velocities, output_offsets = tf.split(
+            rnn_output, 3, axis=1)
+
+        output_velocities = tf.sigmoid(output_velocities)
+        output_offsets = tf.tanh(output_offsets)
+        hits_sampler = tfp.distributions.Bernoulli(
+         logits=output_hits / temperature, dtype=tf.dtypes.float32)
+
+        output_hits = hits_sampler.sample()
+        return tf.concat([output_hits, output_velocities, output_offsets], axis=1)
 
     # # Generate sample from decoder based on latent vector z
     # def sample(self, z):
@@ -181,19 +203,6 @@ class GrooVAEDecoder(tfk.Model):
     #     decode_results = self.call([z, start_inputs])
     #
     #     return decode_results.samples
-
-    # def _sample(self, rnn_output, temperature=1.0):
-    #     output_hits, output_velocities, output_offsets = tf.split(
-    #         rnn_output, 3, axis=1)
-    #
-    #     output_velocities = tf.sigmoid(output_velocities)
-    #     output_offsets = tf.tanh(output_offsets)
-    #
-    #     hits_sampler = tfp.distributions.Bernoulli(
-    #         logits=output_hits / temperature, dtype=tf.dtypes.float32)
-    #
-    #     output_hits = hits_sampler.sample()
-    #     return tf.concat([output_hits, output_velocities, output_offsets], axis=1)
 
 """ ======================= DECODER LOSS HELPERS ========================= """
 def _activate_outputs(flat_rnn_output):
@@ -269,7 +278,8 @@ class GrooVAEEncoder(tfk.Model):
         self.dropout_prob = (1 - self.hparams.dropout_keep_prob) if is_training else 0
 
     # (TODO) This automatically gets called for this model, the encoder. When I tried to do same pattern with decoder,
-    #       it didn't get automatically called? Had to initialize everything in __init__ instead
+    #       it didn't get automatically called? Had to initialize everything in __init__ instead. That pattern works,
+    #       but is confusing why it doesn't work the other way
     # Build the model, defining structures required for forward pass. Automatically called by 'Call'
     def build(self, input_shape):
         print("encoder build got input shape: ", input_shape)
