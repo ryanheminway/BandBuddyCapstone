@@ -258,53 +258,41 @@ class GrooVAEDecoder(tfk.layers.Layer):
 
 """========================= END DECODER =================================="""
 
-"""========================= START GROOVAE MODEL =================================="""
-"""
-TF 2.x implementation of Magenta GrooVAE model. Uses Bidirectional LSTM Encoder and 
-LSTM Decoder. Decoder is a bit more complicated so it is given its own class implementation.
-Decoder uses teacher forcing during training. 
-"""
+"""========================= START ENCODER ================================"""
 
-class GrooVAE(tfk.Model):
-    def __init__(self, hparams, output_depth, is_training, name="vae", **kwargs):
-        super(GrooVAE, self).__init__(name=name, **kwargs)
-        self.is_training = is_training
+class GrooVAEEncoder(tfk.Model):
+    def __init__(self, hparams, is_training, name="encoder", **kwargs):
+        super(GrooVAEEncoder, self).__init__(name=name, **kwargs)
         self.hparams = hparams
-        self.output_depth = output_depth
         # using 1 - hparams.dropout because Keras dropout is inverse of old rnn.DropoutWrapper
-        self.dropout_prob = (1 - self.hparams.dropout_keep_prob) if self.is_training else 0
-        # GrooVAE (2bar_tap_fixed_velocity) Config dictates NO KL annealing, so weight is constant
-        self.kl_weight = self.hparams.max_beta
-        self.encoder = self.encoder_z()
-        # (TODO) temperature should be configurable. For now doesn't matter
-        self.decoder = GrooVAEDecoder(hparams=self.hparams, temperature=0.5,
-                                      is_training=self.is_training,  output_depth=self.output_depth)
+        self.dropout_prob = (1 - self.hparams.dropout_keep_prob) if is_training else 0
 
-    # Sequential API (Bidirectional LSTM) Encoder
-    def encoder_z(self):
+    # Build the model, defining structures required for forward pass
+    def build(self, input_shape):
         layers = []
         layers.append(tfk.layers.Input((32,27), batch_size=1))
         # enc_rnn_size = [512]
         lstm = tfk.layers.LSTM(self.hparams.enc_rnn_size[0], dropout=self.dropout_prob)
         layers.append(tfk.layers.Bidirectional(lstm))
-        return tfk.Sequential(layers, name="encoder_z")
+        self.encoder_layer = tfk.Sequential(layers, name="encoder_z")
 
-    # Encode to Z distribution (MultivariateNormalDiag distribution)
-    def encode(self, input_sequence):
-        enc_output = self.encoder(input_sequence)
-        #print("enc_output: ", enc_output)
-        mu_layer = tfk.layers.Dense(
+        self.mu_layer = tfk.layers.Dense(
             self.hparams.z_size,
             kernel_initializer=tfk.initializers.RandomNormal(stddev=0.001),
             name="encoder/mu_layer")
-        mu = mu_layer(enc_output)
-        #print("mu: ", mu)
-        sigma_layer = tfk.layers.Dense(
+        self.sigma_layer = tfk.layers.Dense(
             self.hparams.z_size,
             activation=tfk.activations.softplus,
             kernel_initializer=tfk.initializers.RandomNormal(stddev=0.001),
             name="encoder/sigma_layer")
-        sigma = sigma_layer(enc_output)
+
+    # Perform forward pass through encoder
+    def call(self, input_sequence):
+        enc_output = self.encoder_layer(input_sequence)
+        #print("enc_output: ", enc_output)
+        mu = self.mu_layer(enc_output)
+        #print("mu: ", mu)
+        sigma = self.sigma_layer(enc_output)
         #print("sigma: ", sigma)
         z = tfp.distributions.MultivariateNormalDiag(loc=mu, scale_diag=sigma)
         #print("Z DISTRIBUTION: ", z)
@@ -312,11 +300,32 @@ class GrooVAE(tfk.Model):
         #print("Z SAMPLE: ", z)
         return (z, z_sample)
 
+
+"""========================= END DECODER =================================="""
+
+"""========================= START GROOVAE MODEL =================================="""
+"""
+TF 2.x implementation of Magenta GrooVAE model. Uses Bidirectional LSTM Encoder and 
+LSTM Decoder. Decoder uses teacher forcing during training. 
+"""
+class GrooVAE(tfk.Model):
+    def __init__(self, hparams, output_depth, is_training, name="vae", **kwargs):
+        super(GrooVAE, self).__init__(name=name, **kwargs)
+        self.is_training = is_training
+        self.hparams = hparams
+        self.output_depth = output_depth
+        # GrooVAE (2bar_tap_fixed_velocity) Config dictates NO KL annealing, so weight is constant
+        self.kl_weight = self.hparams.max_beta
+        self.encoder = GrooVAEEncoder(hparams=self.hparams, is_training=self.is_training)
+        # (TODO) temperature should be configurable. For now doesn't matter
+        self.decoder = GrooVAEDecoder(hparams=self.hparams, temperature=0.5,
+                                      is_training=self.is_training,  output_depth=self.output_depth)
+
     # Encoder sequence to Z distribution and then decode to output sequence
     def call(self, x_input):
         #print("input seq: ", x_input)
         # Real Z distribution produced by encoder
-        (_, q_z_sample) = self.encode(x_input)
+        (_, q_z_sample) = self.encoder(x_input)
         # self.add_loss(lambda: kl_cost) # KL Divergence as loss term
         output_seq = self.decoder([q_z_sample, x_input])
         return output_seq

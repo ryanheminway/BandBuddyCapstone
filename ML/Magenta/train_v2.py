@@ -160,6 +160,13 @@ def train(train_dir,
           global_step=model.global_step,
           name='train_step')
 
+      logging_dict = {'global_step': model.global_step,
+                      'loss': model.loss}
+
+      hooks.append(tf.compat.v1.train.LoggingTensorHook(logging_dict, every_n_iter=100))
+      if num_steps:
+        hooks.append(tf.compat.v1.train.StopAtStepHook(last_step=num_steps))
+
       scaffold = tf.compat.v1.train.Scaffold(
           saver=tf.compat.v1.train.Saver(
               max_to_keep=checkpoints_to_keep,

@@ -14,25 +14,26 @@ os.environ["CUDA_VISIBLE_DEVICEs"] = "-1"
 
 # Custom loss term that returns a function which imitates the form loss(input, expected_output) which
 # is required by Keras model.compile and subsequently model.build
+@tf.function
 def loss_term(input_seq, output_seq, seq_length, groove_model):
-    (z, z_sample) = groove_model.encode(input_seq)
+    (z, z_sample) = groove_model.encoder(input_seq)
     reconstruct_loss = groove_model.decoder.reconstruction_loss(input_seq, output_seq, seq_length, z_sample)
     r_loss = tf.reduce_mean(reconstruct_loss)
     #kl_loss = tf.math.reduce_sum(groove_model.losses)  # vae.losses is a list
     # Separate function (not model.loss term) to avoid accessing graph tensor
     kl_loss = groove_model.kl_loss(z)
     total_vae_loss = r_loss + kl_loss
-    return lambda input, output: total_vae_loss
+    return total_vae_loss
+    #return lambda input, output: total_vae_loss
 
 
 # Single step of training. Compute reconstruction loss, add to KL loss, and compute gradients
 # (TODO) I get errors when marking this as a tf.function
-# @tf.function
 def train_step(input_seq, output_seq, seq_length, groove_model, train_optimizer, train_loss_metric):
     with tf.GradientTape() as tape:
-        loss_fn = loss_term(input_seq, output_seq, seq_length, groove_model)
+        loss_value = loss_term(input_seq, output_seq, seq_length, groove_model)
         # (TODO) hacky and dumb and I hate it
-        loss_value = loss_fn(input_seq, output_seq)
+        #loss_value = loss_fn(input_seq, output_seq)
     gradients = tape.gradient(loss_value, groove_model.trainable_variables)
     train_optimizer.apply_gradients(zip(gradients, groove_model.trainable_variables))
     train_loss_metric(loss_value)
@@ -152,8 +153,8 @@ for epoch in range(epochs):
         optimizer.lr.assign(get_lr(step, groovae_cfg))
 
         # (TODO) This seems really stupid...
-        if step == 0:
-            model.compile(optimizer, loss=loss_term(input_seq=input_sequence, output_seq=output_sequence, seq_length=sequence_length, groove_model=model))
+        #if step == 0:
+        #    model.compile(optimizer, loss=loss_term(input_seq=input_sequence, output_seq=output_sequence, seq_length=sequence_length, groove_model=model))
 
         # Train step
         train_step(input_sequence, output_sequence, sequence_length, model, optimizer, loss_metric)
@@ -164,7 +165,7 @@ for epoch in range(epochs):
         # model.compile first to allow .build to work
         # model.build to set input shapes for model.save
         # (TODO) we call model.build but .save still fails saying we didn't set input shapes?
-        model.build(input_shape=(1, 32, 27))
+        #model.build(input_shape=(1, 32, 27))
         #model.save("./model_test_saved/")
         if epoch % 10 == 0:
             # (TODO) Sometimes this fails due to "folder: access denied"???
