@@ -1,11 +1,12 @@
 import copy, warnings, librosa, numpy as np
-import NANO_configs as configs
-from NANO_trained_model import TrainedModel
+import configs
+from trained_model import TrainedModel
 import note_seq
 from note_seq import midi_synth
 from note_seq.sequences_lib import concatenate_sequences
 from note_seq.protobuf import music_pb2
 from scipy.io.wavfile import write
+import soundfile as sf
 
 # If a sequence has notes at time before 0.0, scoot them up to 0
 def start_notes_at_0(s):
@@ -40,41 +41,6 @@ def change_tempo(note_sequence, new_tempo):
     new_sequence.tempos[0].qpm = new_tempo
     return new_sequence
 
-# Load some configs to be used later
-dc_quantize = configs.CONFIG_MAP['groovae_2bar_humanize'].data_converter
-dc_tap = configs.CONFIG_MAP['groovae_2bar_tap_fixed_velocity'].data_converter
-dc_hihat = configs.CONFIG_MAP['groovae_2bar_add_closed_hh'].data_converter
-dc_4bar = configs.CONFIG_MAP['groovae_4bar'].data_converter
-
-# quick method for removing microtiming and velocity from a sequence
-def get_quantized_2bar(s, velocity=0):
-    new_s = dc_quantize.from_tensors(dc_quantize.to_tensors(s).inputs)[0]
-    new_s = change_tempo(new_s, s.tempos[0].qpm)
-    if velocity != 0:
-        for n in new_s.notes:
-            n.velocity = velocity
-    return new_s
-
-
-# quick method for turning a drumbeat into a tapped rhythm
-def get_tapped_2bar(s, velocity=85, ride=False):
-    new_s = dc_tap.from_tensors(dc_tap.to_tensors(s).inputs)[0]
-    new_s = change_tempo(new_s, s.tempos[0].qpm)
-    if velocity != 0:
-        for n in new_s.notes:
-            n.velocity = velocity
-    if ride:
-        for n in new_s.notes:
-            n.pitch = 42
-    return new_s
-
-
-# quick method for removing hi-hats from a sequence
-def get_hh_2bar(s):
-    new_s = dc_hihat.from_tensors(dc_hihat.to_tensors(s).inputs)[0]
-    new_s = change_tempo(new_s, s.tempos[0].qpm)
-    return new_s
-
 
 # Calculate quantization steps but do not remove microtiming
 def quantize(s, steps_per_quarter=4):
@@ -107,15 +73,6 @@ def get_offset(s, note_index):
 def is_4_4(s):
     ts = s.time_signatures[0]
     return (ts.numerator == 4 and ts.denominator == 4)
-
-
-def preprocess_4bar(s):
-    return dc_4bar.from_tensors(dc_4bar.to_tensors(s).outputs)[0]
-
-
-def preprocess_2bar(s):
-    return dc_quantize.from_tensors(dc_quantize.to_tensors(s).outputs)[0]
-
 
 def _slerp(p0, p1, t):
     """Spherical linear interpolation."""
@@ -391,15 +348,15 @@ See drumify() function for interaction with TrainedModel. Calls to Encode and De
 #GROOVAE_2BAR_TAP_FIXED_VELOCITY = "../model_checkpoints/groovae_2bar_tap_fixed_velocity.tar"
 #GROOVAE_2BAR_TAP_FIXED_VELOCITY = os.path.join('..', 'model_checkpoints', 'groovae_rock')
 #GROOVAE_2BAR_TAP_FIXED_VELOCITY = "../model_checkpoints/groovae_rock/groovae_rock.tar"
-GROOVAE_2BAR_TAP_FIXED_VELOCITY = "../datasets/rundir/train/train.tar"
+# (TODO) must always update this path for appropriate checkpoint .tar
+GROOVAE_2BAR_TAP_FIXED_VELOCITY = "../model_checkpoints/rock_2.tar"
 print("PATH: ", GROOVAE_2BAR_TAP_FIXED_VELOCITY)
 config_2bar_tap = configs.CONFIG_MAP['groovae_2bar_tap_fixed_velocity']
 # Build GrooVAE model from checkpoint variables and config model definition
 groovae_2bar_tap = TrainedModel(config_2bar_tap, 1, checkpoint_dir_or_path=GROOVAE_2BAR_TAP_FIXED_VELOCITY)
 
-#paths = ['../Data/no_joe_tapped.wav', '../Data/ryan_is_no_joe.wav', '../Data/groove_dataset/drummer1/session1/1_funk_80_beat_4-4.wav']
-#paths = ['../Data/basic_plain.wav', '../Data/basic_compressed.wav', '../Data/basic_compressed_midscoop.wav']
-paths = ['../../Data/basic_plain.wav']
+# (TODO) Always update this to change samples
+paths = ['../../Data/footsteps.wav']
 temperature = 0.1
 velocity_threshold = 0.08
 stereo = False
@@ -416,8 +373,9 @@ for i in range(len(paths)):
     y,sr = librosa.load(f)
     # "TRANSLATE" DIRECTLY FROM AUDIO TO NEW DRUM TRACK
     full_drum_audio, full_tap_audio, tap_and_onsets, drums_and_original, combined_drum_sequence = audio_to_drum(f, velocity_threshold=velocity_threshold, temperature=temperature)
-    #print(full_tap_audio)
-    #write("my_test.wav", sr, full_drum_audio)
+    # (TODO) lets me write the full_drum but not drums_and_original? Some diff in file type
+    sf.write("model_out_drums.wav", full_drum_audio, sr, subtype='PCM_24')
+    # sf.write("model_out_combined.wav", drums_and_original, sr, subtype='PCM_24')
     new_beats.append(combined_drum_sequence)
     new_drum_audios.append(full_drum_audio)
     combined_audios.append(drums_and_original)
