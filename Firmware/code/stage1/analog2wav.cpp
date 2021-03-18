@@ -10,6 +10,8 @@
 #include <pthread.h>
 #include <iostream>
 #include <thread>
+#include <fstream>
+#include <ios>
 
 #include "shared_mem.h"
 #include "band_buddy_msg.h"
@@ -54,11 +56,24 @@ static std::atomic_bool is_button_pressed;
 // Set high when the main thread is finished responding to a STOP command
 static std::atomic_bool main_thread_stop_status;
 
+//beats per minute. Will be updated by the webserver
+static std::atomic_uint8_t bpm;
+
 // The mutex upon which to lock the condition variable
 static std::mutex is_button_pressed_mutex;
 
 // The condition variable upon which to alert a button press
 static std::condition_variable is_button_pressed_cv;
+
+static constexpr int met_delay_at_start = 192000 / 200;
+
+//click high array and size
+static uint8_t *click_high = nullptr;
+static int click_high_size;
+
+//click low array and size
+static uint8_t *click_low = nullptr;
+static int click_low_size;
 
 // The number of bytes read in total
 static int num_bytes_read = 0;
@@ -232,9 +247,9 @@ static int init_playback_handle()
 
     // Set the pcm ring buffer size
     // (NOTE Ryan Heminway) dividing by 8 instead of 2 
-    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, BYTES_PER_PERIOD / 8)) < 0)
+    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, BYTES_PER_PERIOD / 2)) < 0)
     {
-        print_error(err, "Cannot set pcm ring buffer size!");
+        print_error(err, "Cannot set playback handle ring buffer size!");
         return err;
     }
 
@@ -324,7 +339,7 @@ int init_capture_handle()
     // Set the pcm ring buffer size
     if ((err = snd_pcm_hw_params_set_buffer_size(capture_handle, hw_params, PCM_RING_BUFFER_SIZE)) < 0)
     {
-        print_error(err, "Cannot set pcm ring buffer size!");
+        print_error(err, "Cannot set capture handle ring buffer size!");
         return err;
     }
 
@@ -463,7 +478,7 @@ int record_until_button_press()
         num_bytes_read += BYTES_PER_PERIOD;
 	
 	// (NOTE Ryan Heminway) listening for 1 periods instead
-        if (num_bytes_read == BYTES_PER_PERIOD * 1)
+        if (num_bytes_read == BYTES_PER_PERIOD * 4)
         {
             // Spawn the consumer thread for async playback 
             std::thread playback_thread(async_playback_until_button_press);
@@ -509,11 +524,6 @@ void async_playback_until_button_press()
         {
             fprintf(stderr, "%s\n", "write back behind read");
             overtook = false;
-        }
-
-        if (!overtook) 
-        {
-            fprintf(stdout, "bytes written: %d\n", num_bytes_written);
         }
 
         if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
@@ -571,6 +581,150 @@ void async_playback_until_button_press()
     }
 }
 
+
+static inline int calculate_num_sample(int bpm){
+    return (SAMPLE_RATE * 4) / (bpm / 60);
+}
+
+static inline int calculate_buffer_size(int samples_per_measure)
+{
+    return (samples_per_measure *  NUM_CHANNELS * BYTES_PER_SAMPLE) + met_delay_at_start;
+}
+
+static void fill_metronome_buffer(uint8_t *metronome_buffer, int buffer_size){
+
+    int l0 = met_delay_at_start, 
+        l1 = (buffer_size / 4) + met_delay_at_start, 
+        l2  = (buffer_size / 2) + met_delay_at_start, 
+        l3 = (buffer_size * 3 / 4) + met_delay_at_start;
+
+    memcpy(metronome_buffer + l0, click_high, click_high_size);
+    memcpy(metronome_buffer + l1, click_low, click_low_size);
+    memcpy(metronome_buffer + l2, click_low, click_low_size);
+    memcpy(metronome_buffer + l3, click_low, click_low_size);
+}
+
+static void open_tick_files(){
+    if (click_high != nullptr && click_low != nullptr) 
+    {
+        return;
+    }
+
+    auto high_click_name = "/home/patch/click_high.wav";
+    auto low_click_name = "/home/patch/click_low.wav";
+
+    std::ifstream high_click_file;
+    high_click_file.open(high_click_name, std::ios::in | std::ios::binary);
+
+    std::ifstream low_click_file;
+    low_click_file.open(low_click_name, std::ios::in | std::ios::binary);
+
+    //seek to the end so we can file size
+    high_click_file.seekg(0, std::ios::end);
+    low_click_file.seekg(0, std::ios::end);
+
+    click_high_size = high_click_file.tellg();
+    click_low_size = low_click_file.tellg();
+
+    //allocate buffers and fill them
+    click_low = new uint8_t[click_low_size];
+    click_high = new uint8_t[click_high_size];
+
+    // Skip the 44-byte header
+    high_click_file.seekg(44, std::ios::beg);
+    low_click_file.seekg(44, std::ios::beg);
+    high_click_file.read((char*)click_high, click_high_size);
+    low_click_file.read((char*)click_low, click_low_size); 
+
+    high_click_file.close();
+    low_click_file.close();
+}
+
+static void play_countin(uint8_t* metronome_buffer, int buffer_size)
+{
+    int err = 0;
+    int num_bytes_written = 0;
+    while (num_bytes_written + BYTES_PER_PERIOD < buffer_size)
+    {
+        if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
+        {
+            print_error(err, "Poll failed!\n");
+            return;
+        }
+        
+        int frames_to_deliver;
+        if ((frames_to_deliver = snd_pcm_avail_update(playback_handle)) < 0)
+        {
+            if (frames_to_deliver == -EPIPE)
+            {
+                print_error(frames_to_deliver, "An xrun occurred!");
+                snd_pcm_prepare(playback_handle);
+                continue;
+            }
+            else
+            {
+                print_error(frames_to_deliver, "An unknown error occurred!\n");
+                return;
+            }
+        }
+
+        // Cap the frames to write
+        frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
+
+        int frames_written;
+        if ((frames_written = snd_pcm_writei(playback_handle, 
+                metronome_buffer + num_bytes_written, frames_to_deliver)) != frames_to_deliver)
+        {
+            if (frames_written == -EPIPE)
+            {
+                fprintf(stdout, "%s\n", "underrun!");
+                snd_pcm_prepare(playback_handle);
+                continue;
+            }
+            else
+            {
+                fprintf(stderr, "writei (wrote %d): expected to write %d frames, actually wrote %d!\n",
+                        num_bytes_written, FRAMES_PER_PERIOD, frames_written);
+                return;
+            }
+        }
+
+        num_bytes_written += frames_written * BYTES_PER_FRAME;
+    }
+
+    if ((err = snd_pcm_close(playback_handle)) < 0)
+    {
+        print_error(err, "Could not close the playback device!");
+        return;
+    }
+} 
+
+static void metronome()
+{
+    //get number of samples 
+    int samples_per_measure = calculate_num_sample(bpm);
+
+    //total number of bytes
+    int buffer_size =   calculate_buffer_size(samples_per_measure);
+
+    //allocate buffer 
+    uint8_t *metronome_buffer = new uint8_t[buffer_size];
+
+    // Fill the click buffers
+    open_tick_files();
+
+    //fill array with correct data
+    fill_metronome_buffer(metronome_buffer, buffer_size);
+
+    fprintf(stdout, "Buffer size: %d, high click size: %d, low click size:%d\n", 
+            buffer_size, click_high_size, click_low_size);
+
+    // Play the metronome buffer in its entirety 
+    play_countin(metronome_buffer, buffer_size);
+
+    // Delete buffers
+    delete[] metronome_buffer;
+}
 
 int close_networkbb_fd()
 {
@@ -855,12 +1009,15 @@ int ping_network_backbone()
     return err;
 }
 
-int main(int argc, char *argv[])
+int main(int, char *[])
 {
     // Register button press signal handler
     //signal(SIGINT, button_pressed);
     pthread_t thread;
     int err = 0;
+
+    // Set BPM to default 
+    bpm.store(60, std::memory_order::memory_order_seq_cst);
 
     // Initialize the server connection
     if (connect_networkbb() == FAILED)
@@ -898,13 +1055,21 @@ int main(int argc, char *argv[])
             return err;
         }
 
+        // Play the countin 
+        metronome();
+
         // Prepare the capture handle
         if ((err = prepare_capture_device()))
         {
             return err;
         }
 
-        // Record
+        // Re-open the playback device and record
+        if ((err = init_playback_handle()))
+        {
+            return err;
+        }
+
         if ((err = record_until_button_press()))
         {
             break;
