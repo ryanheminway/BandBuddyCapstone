@@ -594,9 +594,9 @@ static inline int calculate_buffer_size(int samples_per_measure)
 static void fill_metronome_buffer(uint8_t *metronome_buffer, int buffer_size){
 
     int l0 = met_delay_at_start, 
-        l1 = (buffer_size / 4) + met_delay_at_start, 
-        l2  = (buffer_size / 2) + met_delay_at_start, 
-        l3 = (buffer_size * 3 / 4) + met_delay_at_start;
+        l1 = met_delay_at_start + ((buffer_size - met_delay_at_start) / 4), 
+        l2 = met_delay_at_start + ((buffer_size - met_delay_at_start) / 2), 
+        l3 = met_delay_at_start + ((buffer_size - met_delay_at_start) * 3 / 4);
 
     memcpy(metronome_buffer + l0, click_high, click_high_size);
     memcpy(metronome_buffer + l1, click_low, click_low_size);
