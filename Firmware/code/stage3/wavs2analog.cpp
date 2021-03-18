@@ -619,55 +619,7 @@ static void async_record_until_button_press(int loop_size_bytes)
     fprintf(stdout, "%s\n", "Starting async record (not async rn  tho)");
     while (!is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
-        // if (!overtook && num_bytes_written >= num_bytes_read)
-        // {
-        //     fprintf(stderr, "Write went too fast: wrote %d bytes.\n", num_bytes_written);
-        //     overtook = true;
-        // }
-        // else if (overtook && num_bytes_written < num_bytes_read)
-        // {
-        //     fprintf(stderr, "%s\n", "write back behind read");
-        //     overtook = false;
-        // }
-
-        // if (!overtook) 
-        // {
-        //     fprintf(stdout, "bytes written: %d\n", num_bytes_written);
-        // }
-
-        // if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
-        // {
-        //     print_error(err, "Poll failed!\n");
-        //     return;
-        // }
-        
-        // snd_pcm_sframes_t frames_to_deliver;
-        // if ((frames_to_deliver = snd_pcm_avail_update(capture_handle)) < FRAMES_PER_PERIOD)
-        // {
-        //     if (frames_to_deliver == -EPIPE)
-        //     {
-        //         print_error(frames_to_deliver, "An xrun occurred!");
-        //         snd_pcm_prepare(playback_handle);
-        //         continue;
-        //     }
-        //     else
-        //     {
-        //         print_error(frames_to_deliver, "An unknown error occurred!\n");
-        //         return;
-        //     }
-        // }
-
-        // // Read one period, even if more is available
-        // if ((err = snd_pcm_readi(capture_handle, recording_buffer + num_bytes_read, frames_to_deliver)) != frames_to_deliver)
-        // {
-        //     print_error(err, "Frame read failed: %d!", err);
-        //     return;
-        // }        
-
-        // num_bytes_read += frames_to_deliver * BYTES_PER_FRAME;
-        // fprintf(stdout, "num bytes read: %d\n", num_bytes_read);
-
-// Await a new set of data
+        // Await a new set of data
         if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
         {
             print_error(err, "Capture wait failed!");
@@ -863,27 +815,3 @@ int main(int argc, char **argv)
 
     return 0;
 }
-
-
-        // int bytes_to_deliver = frames_to_deliver * BYTES_PER_FRAME;
-        // int recording_queue_start = recording_buffer_tail;
-        // int recording_queue_end = (recording_queue_start + bytes_to_deliver) % RECORDING_BUFFER_SIZE;
-
-        // for (int i = recording_queue_start; i != recording_queue_end; i = (i + 2) % RECORDING_BUFFER_SIZE)
-        // {
-        //     // Grab one sample from the sync buffer and one sample from the recorded buffer
-        //     int16_t sample_to_play_int = buffer_to_play[sample_index] | (buffer_to_play[sample_index + 1] << 8);
-        //     int16_t sample_recorded_int = recording_buffer[i] | (recording_buffer[i + 1] << 8);
-
-        //     double sample_to_play = (double)sample_to_play_int;
-        //     double sample_recorded = (double)sample_recorded_int;
-
-        //     double avg = (sample_to_play + sample_recorded) / 2;
-        //     int16_t avg_int = (int16_t)avg;
-
-        //     // Put it back into the recording buffer
-        //     recording_buffer[i] = (avg_int & 0xFF);
-        //     recording_buffer[i + 1] = (avg_int >> 8) & 0xFF;
-        // }
-
-        // recording_buffer_tail = recording_queue_end;
