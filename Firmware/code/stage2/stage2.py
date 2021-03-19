@@ -42,8 +42,9 @@ class Stage2Handler():
 
         print("Generating drum track...\n")
         # Apply trained model to input track. Only care about drum audio on return
-        full_drum_audio = audio.audio_to_drum(np_wav_data, sr, velocity_threshold=self.velocity_threshold,
-                                                          temperature=self.temperature, model=model)
+        full_drum_audio = audio.audio_to_drum(np_wav_data, sr, tempo=self.tempo
+                velocity_threshold=self.velocity_threshold,
+                temperature=self.temperature, model=model)
 
         # Create abs path for soundpack
         soundpack_file = bb_types.SOUNDPACK_DIR + "/" + bb_types.ID_TO_SOUNDPACK[self.soundpack]
