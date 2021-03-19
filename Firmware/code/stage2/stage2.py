@@ -108,6 +108,7 @@ def main():
             print("got command: ", command)
             print("we want command: ", network.STAGE1_DATA)
 
+            # Message has wav data to process into a drum track
             if (command == network.STAGE1_DATA):
                 print("STAGE1 DATA")
                 drum_data = handler.handle_wav_data(buff, model)
@@ -118,11 +119,13 @@ def main():
                 # send wav data back to stage 3
                 print("Sending drum wav data\n")
                 network.send_msg(socket_fd, drum_data, network.BACKBONE_SERVER, network.STAGE2_DATA_READY)
+            # Message has params to update model with, from webserver
             elif (command == network.WEBSERVER_DATA):
                 print("WEBSERVER DATA")
                 handler.handle_webserver_data(buff)
-                # (TODO) allow stage2 to send webserver data to webserver
-                network.send_webserver_data(socket_fd, handler.genre, handler.soundpack, handler.tempo, handler.temperature, 0, 0, network.WEB_SERVER_STAGE, network.STAGE2)
+            # (TODO) once request message is added, we can respond with current handler params to webserver
+            #elif (command == network.WEBSERVER_REQUEST):
+            #    network.send_webserver_data(socket_fd, handler.genre, handler.soundpack, handler.tempo, handler.temperature, 0, 0, network.WEB_SERVER_STAGE, network.STAGE2)
 
         except KeyboardInterrupt:
             print("Shutting down stage2")
