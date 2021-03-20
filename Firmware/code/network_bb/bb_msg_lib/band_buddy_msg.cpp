@@ -5,6 +5,7 @@
 #include "stage2_generated.h"
 #include "wave_file_generated.h"
 #include "web_server_generated.h"
+#include "web_server_stage3_generated.h"
 #include "shared_mem.h"
 #include <netdb.h> 
 #include <stdio.h> 
@@ -24,6 +25,7 @@ using namespace Server::Stage2;
 using namespace Server::Wave;
 
 using namespace Server::WebServer;
+using namespace Server::WebServerStage3;
 
 static int get_socket_discriptor(){
     int sockfd = 0; 
@@ -340,6 +342,31 @@ int send_webserver_data(int &socket_fd, int &stage_id, int &destination, uint32_
     }
 
     ret = send_payload(socket_fd, webserver_msg_ptr, payload_size);
+
+    builder.Clear();
+
+    return (ret != FAILED) ? SUCCESS : FAILED;
+}
+
+int send_webserverstage3_data(int &socket_fd, int &stage_id, int &destination, uint8_t &drums, uint8_t &guitar) {
+    int ret = FAILED;
+    int cmd = WEBSERVER_DATA;
+    int payload_size;
+    flatbuffers::FlatBufferBuilder builder;
+
+    auto webserverstage3_msg = CreateWebServerStage3(builder, drums, guitar);
+    builder.Finish(webserverstage3_msg);
+
+    auto webserverstage3_msg_ptr = builder.GetBufferPointer();
+    payload_size = builder.GetSize();
+
+    ret = create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+    if(ret == FAILED){
+        printf("Error while sending header message to server\n");
+        return ret;
+    }
+
+    ret = send_payload(socket_fd, webserverstage3_msg_ptr, payload_size);
 
     builder.Clear();
 

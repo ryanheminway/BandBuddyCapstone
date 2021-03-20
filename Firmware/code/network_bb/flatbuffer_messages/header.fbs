@@ -2,7 +2,8 @@ namespace Server.Header;
 
 enum Stages:ubyte {Stage1 = 0, Stage2, Stage3, WebServer, BIG_BROTHER, BACKBONE_SERVER = 5}
 
-enum Cmds:ubyte {Register = 0, Stage1_data_ready, Stage2_data_ready, Stage3_data_ready, Stage1_data, Web_server_data, Stop, Start, Button_pressed, ACK = 9}
+enum Cmds:ubyte {Register = 0, Stage1_data_ready, Stage2_data_ready, Stage3_data_ready, Stage1_data,
+                 Web_server_data, Stop, Start, Button_pressed, ACK, Web_server_request = 10}
 
 table Header {
     payload_size:uint32;

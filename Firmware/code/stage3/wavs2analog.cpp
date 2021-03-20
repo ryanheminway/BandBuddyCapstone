@@ -53,7 +53,6 @@ std::mutex is_button_pressed_mutex;
 // The socket descriptor for the network backbone
 static int networkbb_fd;
 
-
 void stop_recording()
 {
     // Acquire the mutex and await the condition variable
@@ -62,12 +61,23 @@ void stop_recording()
 }
 
 static void handle_webserverstage3_data(int &socket_fd, int &payload_size) {
-    uint32_t drums = 0;
-    uint32_t guitar = 0;
+    uint8_t drums = 0;
+    uint8_t guitar = 0;
 
     recieve_webserverstage3_data(socket_fd, payload_size, drums, guitar);
     output_recorded_audio.store(guitar, std::memory_order::memory_order_seq_cst);
     output_generated_audio.store(drums, std::memory_order::memory_order_seq_cst);
+}
+
+static void send_webserverstage3_data(int &socket_fd, int &payload_size) {
+    uint8_t drums = 0;
+    uint8_t guitar = 0;
+    int this_stage_id = STAGE3;
+    int this_destination = WEBSERVER;
+
+    drums = output_recorded_audio.load(std::memory_order::memory_order_relaxed);
+    drums = output_generated_audio.load(std::memory_order::memory_order_relaxed);
+    send_webserverstage3_data(socket_fd, this_stage_id, this_destination, drums, guitar);
 }
 
 void *wait_button_pressed(void *thread_args)
@@ -94,12 +104,16 @@ void *wait_button_pressed(void *thread_args)
             case WEBSERVER_DATA:
                 handle_webserverstage3_data(networkbb_fd, payload_size);
                 break;
+            case WEBSERVER_REQUEST:
+                send_webserverstage3_data(networkbb_fd, payload_size);
+                break;
             default:
                 std::cout << " Sorrry kid wrong command\n";
                 break;
         }
     }
 }
+
 // Button press handler
 /*void button_pressed(int sig)
 {

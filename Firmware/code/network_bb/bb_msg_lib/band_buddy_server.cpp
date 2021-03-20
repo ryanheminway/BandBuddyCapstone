@@ -22,6 +22,7 @@ using namespace Server::Header;
 using namespace Server::Stage1;
 using namespace Server::Stage2;
 using namespace Server::WebServer;
+using namespace Server::WebServerStage3;
 
 int retrieve_header(char *buffer, int sockfd) {
     int ret = FAILED;
@@ -277,7 +278,7 @@ int recieve_webserver_data(int &sock_fd, int &payload_sz, uint32_t &genre, uint3
     return ret;
 }
 
-int recieve_webserverstage3_data(int &sock_fd, int &payload_sz, uint32_t &drums, uint32_t &guitar) {
+int recieve_webserverstage3_data(int &sock_fd, int &payload_sz, uint8_t &drums, uint8_t &guitar) {
     int ret = FAILED;
     uint8_t *buffer_ptr = NULL;
 
