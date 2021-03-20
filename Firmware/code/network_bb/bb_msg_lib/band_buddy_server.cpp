@@ -4,6 +4,7 @@
 #include "stage1_generated.h"
 #include "stage2_generated.h"
 #include "web_server_generated.h"
+#include "web_server_stage3_generated.h"
 #include "shared_mem.h"
 #include <iostream>
 #include <netdb.h> 
@@ -268,6 +269,35 @@ int recieve_webserver_data(int &sock_fd, int &payload_sz, uint32_t &genre, uint3
     std::cout << "timbre: " << timbre << std::endl;
     std::cout << "tempo: " << tempo << std::endl;
     std::cout << "temperature: " << temperature << std::endl;
+#endif
+
+    ret = SUCCESS;
+    free(buffer_ptr);
+
+    return ret;
+}
+
+int recieve_webserverstage3_data(int &sock_fd, int &payload_sz, uint32_t &drums, uint32_t &guitar) {
+    int ret = FAILED;
+    uint8_t *buffer_ptr = NULL;
+
+    buffer_ptr = (uint8_t *)malloc(payload_sz);
+
+    ret = retrieve_payload(sock_fd, payload_sz, buffer_ptr);
+
+    if(ret == FAILED){
+        return ret;
+    }
+
+    std::cout << "retrieve_payload bytes: " << ret << std::endl;
+
+    auto webserver_fb = GetWebServerStage3(buffer_ptr);
+    drums = webserver_fb->drums();
+    guitar = webserver_fb->guitar();
+
+#ifdef DEBUG
+    std::cout << "drums: " << drums << std::endl;
+    std::cout << "guitar: " << guitar << std::endl;
 #endif
 
     ret = SUCCESS;

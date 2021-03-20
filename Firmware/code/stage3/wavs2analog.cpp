@@ -61,6 +61,15 @@ void stop_recording()
     is_button_pressed.store(true, std::memory_order::memory_order_seq_cst);
 }
 
+static void handle_webserverstage3_data(int &socket_fd, int &payload_size) {
+    uint32_t drums = 0;
+    uint32_t guitar = 0;
+
+    recieve_webserverstage3_data(socket_fd, payload_size, drums, guitar);
+    output_recorded_audio.store(guitar, std::memory_order::memory_order_seq_cst);
+    output_generated_audio.store(drums, std::memory_order::memory_order_seq_cst);
+}
+
 void *wait_button_pressed(void *thread_args)
 {
     #warning "Clean up wait_button_pressed function\n"
@@ -81,6 +90,9 @@ void *wait_button_pressed(void *thread_args)
             case STOP:
                 stop_recording();
                 send_ack(networkbb_fd, this_destination, this_stage_id);
+                break;
+            case WEBSERVER_DATA:
+                handle_webserverstage3_data(networkbb_fd, payload_size);
                 break;
             default:
                 std::cout << " Sorrry kid wrong command\n";
