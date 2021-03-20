@@ -14,4 +14,5 @@ int recieve_and_mem_shared_stage2_data(int &sock_fd, int &payload_size);
 int recieve_and_send_webserver_fbb(int &sock_fd, int &payload_size, int &destination_socket);
 int recieve_ack(int &sock_fd, int &stage_id);
 int recieve_through_message(int &sock_fd, uint8_t *buff, int &payload_size);
+int recieve_webserver_data(int &socket_fd, int &payload_size, uint32_t &genre, uint32_t &timbre, uint32_t &tempo, double &temperature);
 #endif

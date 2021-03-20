@@ -15,14 +15,29 @@ struct WebServerBuilder;
 struct WebServer FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef WebServerBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_GENRE = 4
+    VT_GENRE = 4,
+    VT_TIMBRE = 6,
+    VT_TEMPO = 8,
+    VT_TEMPERATURE = 10
   };
   uint32_t genre() const {
     return GetField<uint32_t>(VT_GENRE, 0);
   }
+  uint32_t timbre() const {
+    return GetField<uint32_t>(VT_TIMBRE, 0);
+  }
+  uint32_t tempo() const {
+    return GetField<uint32_t>(VT_TEMPO, 0);
+  }
+  double temperature() const {
+    return GetField<double>(VT_TEMPERATURE, 0.0);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_GENRE) &&
+           VerifyField<uint32_t>(verifier, VT_TIMBRE) &&
+           VerifyField<uint32_t>(verifier, VT_TEMPO) &&
+           VerifyField<double>(verifier, VT_TEMPERATURE) &&
            verifier.EndTable();
   }
 };
@@ -33,6 +48,15 @@ struct WebServerBuilder {
   flatbuffers::uoffset_t start_;
   void add_genre(uint32_t genre) {
     fbb_.AddElement<uint32_t>(WebServer::VT_GENRE, genre, 0);
+  }
+  void add_timbre(uint32_t timbre) {
+    fbb_.AddElement<uint32_t>(WebServer::VT_TIMBRE, timbre, 0);
+  }
+  void add_tempo(uint32_t tempo) {
+    fbb_.AddElement<uint32_t>(WebServer::VT_TEMPO, tempo, 0);
+  }
+  void add_temperature(double temperature) {
+    fbb_.AddElement<double>(WebServer::VT_TEMPERATURE, temperature, 0.0);
   }
   explicit WebServerBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -47,8 +71,14 @@ struct WebServerBuilder {
 
 inline flatbuffers::Offset<WebServer> CreateWebServer(
     flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t genre = 0) {
+    uint32_t genre = 0,
+    uint32_t timbre = 0,
+    uint32_t tempo = 0,
+    double temperature = 0.0) {
   WebServerBuilder builder_(_fbb);
+  builder_.add_temperature(temperature);
+  builder_.add_tempo(tempo);
+  builder_.add_timbre(timbre);
   builder_.add_genre(genre);
   return builder_.Finish();
 }

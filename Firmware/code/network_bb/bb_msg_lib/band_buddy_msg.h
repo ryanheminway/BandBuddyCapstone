@@ -21,7 +21,7 @@
 #define STAGE2_DATA_READY (2)
 #define STAGE3_DATA_READY (3)
 #define STAGE1_DATA (4)
-#define WEBSERVER_REQUEST (5)
+#define WEBSERVER_DATA (5)
 #define STOP (6)
 #define START (7)
 #define BUTTON_PRESEED (8)
@@ -46,11 +46,12 @@ int stage1_data_ready(int &socket_fd, int &destination, int size);
 int stage2_data_ready(int &socket_fd, int &size);
 int send_wav_file(int &socket_fd, struct wave_header &wav_hdr, int8_t *raw_data, int &size);
 int send_wav_shared_mem(int &socket_fd, uint32_t &size);
-int send_webserver_data(int &socket_fd, uint8_t *webserver_data, int &size);
 int send_ack(int &socket_fd, int &destination, int &stage_id);
 int send_through_message(int &socket_fd, int &destination, int &cmd, int &stage_id, int &payload_size, int &dst_sock);
 int stage1_start(int &socket_fd, int& stage_id);
 int stage1_stop(int &socket_fd, int& stage_id);
 int stage3_stop(int &socket_fd, int& stage_id);
+int send_webserver_data(int &socket_fd, int &stage_id, int &dest, uint32_t &genre,
+                        uint32_t &timbre, uint32_t &tempo, double &temperature);
 
 #endif //BAND_BUDDY_MSG
