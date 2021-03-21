@@ -278,5 +278,5 @@ def test_large_data():
     f.close()
     f_test.close()
 if __name__ == "__main__":
-    test_webserver()
+    test()
     

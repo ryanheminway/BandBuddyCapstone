@@ -9,6 +9,9 @@
 #include <mutex>
 #include <pthread.h>
 #include <iostream>
+#include <thread>
+#include <fstream>
+#include <ios>
 
 #include "shared_mem.h"
 #include "band_buddy_msg.h"
@@ -37,11 +40,12 @@
 
 // For now, hold 1024 periods in the mem buffer
 #define PERIODS_IN_WAV_BUFFER 1024
-#define WAV_BUFFER_SIZE BYTES_PER_PERIOD *PERIODS_IN_WAV_BUFFER
-static uint8_t buffer[WAV_BUFFER_SIZE];
+#define WAV_BUFFER_SIZE BYTES_PER_PERIOD * PERIODS_IN_WAV_BUFFER
+static uint8_t buffer[WAV_BUFFER_SIZE * 32];
 
 // The ALSA capture handle
 static snd_pcm_t *capture_handle;
+static snd_pcm_t *playback_handle;
 
 // The ALSA capture device name to use
 static const char *alsa_capture_device_name = "plughw:CARD=pisound";
@@ -49,11 +53,27 @@ static const char *alsa_capture_device_name = "plughw:CARD=pisound";
 // Cancel atomic: set high when the button is pressed
 static std::atomic_bool is_button_pressed;
 
+// Set high when the main thread is finished responding to a STOP command
+static std::atomic_bool main_thread_stop_status;
+
+//beats per minute. Will be updated by the webserver
+static std::atomic_uint8_t bpm;
+
 // The mutex upon which to lock the condition variable
 static std::mutex is_button_pressed_mutex;
 
 // The condition variable upon which to alert a button press
 static std::condition_variable is_button_pressed_cv;
+
+static constexpr int met_delay_at_start = 192000 / 200;
+
+//click high array and size
+static uint8_t *click_high = nullptr;
+static int click_high_size;
+
+//click low array and size
+static uint8_t *click_low = nullptr;
+static int click_low_size;
 
 // The number of bytes read in total
 static int num_bytes_read = 0;
@@ -86,6 +106,15 @@ void await_button_press()
     is_button_pressed_cv.wait(lock, [&]() { return is_button_pressed.load(std::memory_order::memory_order_seq_cst); });
 }
 
+void await_network_backbone_notify_complete()
+{
+    // Acquire the mutex and await the condition variable
+    std::unique_lock<std::mutex> lock(is_button_pressed_mutex);
+
+    // Lambda prevents spurious wakeups
+    is_button_pressed_cv.wait(lock, [&]() { return main_thread_stop_status.load(std::memory_order::memory_order_seq_cst); });
+}
+
 void *wait_button_pressed(void *thread_args)
 {
 #warning "Clean up wait_button_pressed function\n"
@@ -112,8 +141,9 @@ void *wait_button_pressed(void *thread_args)
             break;
         case STOP:
             stop_recording();
+
             //wait for main thread to finish
-            await_button_press();
+            await_network_backbone_notify_complete();
             send_ack(networkbb_fd, this_destination, this_stage_id);
             break;
         default:
@@ -142,12 +172,135 @@ int connect_networkbb()
     return connect_and_register(id, networkbb_fd);
 }
 
+static int init_playback_handle()
+{
+    int err;
+
+    // Open the pisound audio device
+    if ((err = snd_pcm_open(&playback_handle, alsa_capture_device_name, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK)) < 0)
+    {
+        print_error(err, "Cannot open audio device \"%s\"!", alsa_capture_device_name);
+        return err;
+    }
+
+    // Allocate hardware parameters for this device
+    snd_pcm_hw_params_t *hw_params;
+    if ((err = snd_pcm_hw_params_malloc(&hw_params)) < 0)
+    {
+        print_error(err, "Cannot allocate hardware parameters!");
+        return err;
+    }
+
+    // Initialize the hardware params
+    if ((err = snd_pcm_hw_params_any(playback_handle, hw_params)) < 0)
+    {
+        print_error(err, "Cannot initialize hardware parameters!");
+        return err;
+    }
+
+    // Receive data in interleaved format (vs each channel in completion at a time) to directly write data as WAV
+    if ((err = snd_pcm_hw_params_set_access(playback_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0)
+    {
+        print_error(err, "Cannot set access type to interleaved!");
+        return err;
+    }
+
+    // Receive data as unsigned 16-bit frames
+    if ((err = snd_pcm_hw_params_set_format(playback_handle, hw_params, SND_PCM_FORMAT_S16)) < 0)
+    {
+        print_error(err, "Cannot set frame format to unsigned 16-bit!");
+        return err;
+    }
+
+    // Target 48KHz; if that isn't possible, something has gone wrong
+    unsigned int rate = SAMPLE_RATE;
+    if ((err = snd_pcm_hw_params_set_rate_near(playback_handle, hw_params, &rate, 0)) < 0)
+    {
+        print_error(err, "Could not set sample rate: pcm call failed!\n");
+        return err;
+    }
+    if (rate != SAMPLE_RATE)
+    {
+        fprintf(stderr, "Could not set sample rate: target %d, returned %d!\n", SAMPLE_RATE, rate);
+        return 1;
+    }
+
+    // Capture stereo audio
+    if ((err = snd_pcm_hw_params_set_channels(playback_handle, hw_params, 2)) < 0)
+    {
+        print_error(err, "Could not request stereo audio!\n");
+        return err;
+    }
+
+    // Set the period size
+    snd_pcm_uframes_t num_frames = FRAMES_PER_PERIOD;
+    if ((err = snd_pcm_hw_params_set_period_size_near(playback_handle, hw_params, &num_frames, 0)) < 0)
+    {
+        print_error(err, "Could not set the period size!\n");
+        return err;
+    }
+    if (num_frames != FRAMES_PER_PERIOD)
+    {
+        fprintf(stderr, "Could not set frames/period: target %d, returned %lu!\n", FRAMES_PER_PERIOD, num_frames);
+        return 1;
+    }
+
+    // Set the pcm ring buffer size
+    // (NOTE Ryan Heminway) dividing by 8 instead of 2 
+    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, BYTES_PER_PERIOD / 2)) < 0)
+    {
+        print_error(err, "Cannot set playback handle ring buffer size!");
+        return err;
+    }
+
+    // Deliver the hardware params to the handle
+    if ((err = snd_pcm_hw_params(playback_handle, hw_params)) < 0)
+    {
+        print_error(err, "Could not deliver hardware parameters to the capture device!");
+        return err;
+    }
+
+    // Free the hw params
+    snd_pcm_hw_params_free(hw_params);
+
+    // Allocate software parameters
+    snd_pcm_sw_params_t *sw_params;
+    if ((err = snd_pcm_sw_params_malloc(&sw_params)) < 0)
+    {
+        print_error(err, "Could not allocate software parameters for the capture device!");
+        return err;
+    }
+
+    // Initialize the software parameters
+    if ((err = snd_pcm_sw_params_current(playback_handle, sw_params)) < 0)
+    {
+        print_error(err, "Could not initialize the software parameters for the capture device!");
+        return err;
+    }
+
+    // Set the software parameters
+    if ((err = snd_pcm_sw_params(playback_handle, sw_params)) < 0)
+    {
+        print_error(err, "Could not deliver the software parameters to the capture device!");
+        return err;
+    }
+
+    // Free the sw params
+    snd_pcm_sw_params_free(sw_params);
+
+    // Prepare and start the device
+    snd_pcm_prepare(playback_handle);
+    //snd_pcm_start(playback_handle);
+
+    return 0;
+}
+
 // Initalize the capture handle for audio capture. Returns 0 on success, errno on failure.
 int init_capture_handle()
 {
     int err;
 
-    // Open the pisound audio device
+    // Open the pisound audio device to capture
     if ((err = snd_pcm_open(&capture_handle, alsa_capture_device_name, SND_PCM_STREAM_CAPTURE, SND_PCM_NONBLOCK)) < 0)
     {
         print_error(err, "Cannot open audio device \"%s\"!", alsa_capture_device_name);
@@ -186,7 +339,7 @@ int init_capture_handle()
     // Set the pcm ring buffer size
     if ((err = snd_pcm_hw_params_set_buffer_size(capture_handle, hw_params, PCM_RING_BUFFER_SIZE)) < 0)
     {
-        print_error(err, "Cannot set pcm ring buffer size!");
+        print_error(err, "Cannot set capture handle ring buffer size!");
         return err;
     }
 
@@ -258,12 +411,26 @@ int init_capture_handle()
 int prepare_capture_device()
 {
     int err = 0;
+
+    //prepare capture
     if ((err = snd_pcm_prepare(capture_handle)) < 0)
     {
         print_error(err, "Could not prepare the capture device!");
     }
+
+
     return err;
 }
+int close_capture_handle()
+{
+    int ret;
+    ret  = snd_pcm_close(capture_handle);
+    ret |= snd_pcm_close(playback_handle);
+
+    return ret;
+}
+
+void async_playback_until_button_press();
 
 int record_until_button_press()
 {
@@ -274,15 +441,10 @@ int record_until_button_press()
         return err;
     }
 
+    bool is_consumer_thread_spawned = false;
     num_bytes_read = 0;
     while (num_bytes_read + BYTES_PER_PERIOD < WAV_BUFFER_SIZE && is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
-        // If the button has been pressed, stop recording
-        /*if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
-        {
-            break;
-        }*/
-
         // Await a new set of data
         if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
         {
@@ -307,14 +469,25 @@ int record_until_button_press()
         if ((err = snd_pcm_readi(capture_handle, buffer + num_bytes_read, FRAMES_PER_PERIOD)) != FRAMES_PER_PERIOD)
         {
             print_error(err, "Frame read failed!");
+            close_capture_handle();
             return err;
         }
 
+        //fprintf(stdout, "Num_bytes_Read = %d\n", num_bytes_read);
+
         num_bytes_read += BYTES_PER_PERIOD;
+	
+	// (NOTE Ryan Heminway) listening for 1 periods instead
+        if (num_bytes_read == BYTES_PER_PERIOD * 4)
+        {
+            // Spawn the consumer thread for async playback 
+            std::thread playback_thread(async_playback_until_button_press);
+            playback_thread.detach();
+        }
     }
 
     // If the button has not been pressed, we ran out of space!
-    if (!is_button_pressed.load(std::memory_order::memory_order_relaxed))
+    if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
         fprintf(stderr, "%s", "Recording ran out of memory!\n");
         return 0;
@@ -333,9 +506,224 @@ int record_until_button_press()
     return 0;
 }
 
-int close_capture_handle()
+void async_playback_until_button_press()
 {
-    return snd_pcm_close(capture_handle);
+    fprintf(stdout, "Playback spawned: read %d bytes\n", num_bytes_read);
+
+    int err = 0;
+    int num_bytes_written = 0;
+    bool overtook = false;
+    while (num_bytes_written + BYTES_PER_PERIOD < WAV_BUFFER_SIZE && is_button_pressed.load(std::memory_order::memory_order_relaxed))
+    {
+        if (!overtook && num_bytes_written >= num_bytes_read)
+        {
+            fprintf(stderr, "Write went too fast: wrote %d bytes.\n", num_bytes_written);
+            overtook = true;
+        }
+        else if (overtook && num_bytes_written < num_bytes_read)
+        {
+            fprintf(stderr, "%s\n", "write back behind read");
+            overtook = false;
+        }
+
+        if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
+        {
+            print_error(err, "Poll failed!\n");
+            return;
+        }
+        
+        int frames_to_deliver;
+        if ((frames_to_deliver = snd_pcm_avail_update(playback_handle)) < 0)
+        {
+            if (frames_to_deliver == -EPIPE)
+            {
+                print_error(frames_to_deliver, "An xrun occurred!");
+                snd_pcm_prepare(playback_handle);
+                continue;
+            }
+            else
+            {
+                print_error(frames_to_deliver, "An unknown error occurred!\n");
+                return;
+            }
+        }
+
+        // Cap the frames to write
+        frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
+
+        int frames_written;
+        if ((frames_written = snd_pcm_writei(playback_handle, buffer + num_bytes_written, frames_to_deliver)) != frames_to_deliver)
+        {
+            if (frames_written == -EPIPE)
+            {
+                fprintf(stdout, "%s\n", "underrun!");
+                snd_pcm_prepare(playback_handle);
+                continue;
+            }
+            else
+            {
+                fprintf(stderr, "writei (wrote %d): expected to write %d frames, actually wrote %d!\n",
+                        num_bytes_written, FRAMES_PER_PERIOD, frames_written);
+                return;
+            }
+        }
+
+        num_bytes_written += frames_written * BYTES_PER_FRAME;
+    }
+
+    if ((err = snd_pcm_close(playback_handle)) < 0)
+    {
+        print_error(err, "Could not close the playback device!");
+        return;
+    } else 
+    {
+        fprintf(stdout, "%s\n", "playback handle closed");
+    }
+}
+
+
+static inline int calculate_num_sample(int bpm){
+    return (SAMPLE_RATE * 4) / (bpm / 60);
+}
+
+static inline int calculate_buffer_size(int samples_per_measure)
+{
+    return (samples_per_measure *  NUM_CHANNELS * BYTES_PER_SAMPLE) + met_delay_at_start;
+}
+
+static void fill_metronome_buffer(uint8_t *metronome_buffer, int buffer_size){
+
+    int l0 = met_delay_at_start, 
+        l1 = met_delay_at_start + ((buffer_size - met_delay_at_start) / 4), 
+        l2 = met_delay_at_start + ((buffer_size - met_delay_at_start) / 2), 
+        l3 = met_delay_at_start + ((buffer_size - met_delay_at_start) * 3 / 4);
+
+    memcpy(metronome_buffer + l0, click_high, click_high_size);
+    memcpy(metronome_buffer + l1, click_low, click_low_size);
+    memcpy(metronome_buffer + l2, click_low, click_low_size);
+    memcpy(metronome_buffer + l3, click_low, click_low_size);
+}
+
+static void open_tick_files(){
+    if (click_high != nullptr && click_low != nullptr) 
+    {
+        return;
+    }
+
+    auto high_click_name = "/home/patch/click_high.wav";
+    auto low_click_name = "/home/patch/click_low.wav";
+
+    std::ifstream high_click_file;
+    high_click_file.open(high_click_name, std::ios::in | std::ios::binary);
+
+    std::ifstream low_click_file;
+    low_click_file.open(low_click_name, std::ios::in | std::ios::binary);
+
+    //seek to the end so we can file size
+    high_click_file.seekg(0, std::ios::end);
+    low_click_file.seekg(0, std::ios::end);
+
+    click_high_size = high_click_file.tellg();
+    click_low_size = low_click_file.tellg();
+
+    //allocate buffers and fill them
+    click_low = new uint8_t[click_low_size];
+    click_high = new uint8_t[click_high_size];
+
+    // Skip the 44-byte header
+    high_click_file.seekg(44, std::ios::beg);
+    low_click_file.seekg(44, std::ios::beg);
+    high_click_file.read((char*)click_high, click_high_size);
+    low_click_file.read((char*)click_low, click_low_size); 
+
+    high_click_file.close();
+    low_click_file.close();
+}
+
+static void play_countin(uint8_t* metronome_buffer, int buffer_size)
+{
+    int err = 0;
+    int num_bytes_written = 0;
+    while (num_bytes_written + BYTES_PER_PERIOD < buffer_size)
+    {
+        if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
+        {
+            print_error(err, "Poll failed!\n");
+            return;
+        }
+        
+        int frames_to_deliver;
+        if ((frames_to_deliver = snd_pcm_avail_update(playback_handle)) < 0)
+        {
+            if (frames_to_deliver == -EPIPE)
+            {
+                print_error(frames_to_deliver, "An xrun occurred!");
+                snd_pcm_prepare(playback_handle);
+                continue;
+            }
+            else
+            {
+                print_error(frames_to_deliver, "An unknown error occurred!\n");
+                return;
+            }
+        }
+
+        // Cap the frames to write
+        frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
+
+        int frames_written;
+        if ((frames_written = snd_pcm_writei(playback_handle, 
+                metronome_buffer + num_bytes_written, frames_to_deliver)) != frames_to_deliver)
+        {
+            if (frames_written == -EPIPE)
+            {
+                fprintf(stdout, "%s\n", "underrun!");
+                snd_pcm_prepare(playback_handle);
+                continue;
+            }
+            else
+            {
+                fprintf(stderr, "writei (wrote %d): expected to write %d frames, actually wrote %d!\n",
+                        num_bytes_written, FRAMES_PER_PERIOD, frames_written);
+                return;
+            }
+        }
+
+        num_bytes_written += frames_written * BYTES_PER_FRAME;
+    }
+
+    if ((err = snd_pcm_close(playback_handle)) < 0)
+    {
+        print_error(err, "Could not close the playback device!");
+        return;
+    }
+} 
+
+static void metronome()
+{
+    //get number of samples 
+    int samples_per_measure = calculate_num_sample(bpm);
+
+    //total number of bytes
+    int buffer_size =   calculate_buffer_size(samples_per_measure);
+
+    //allocate buffer 
+    uint8_t *metronome_buffer = new uint8_t[buffer_size];
+
+    // Fill the click buffers
+    open_tick_files();
+
+    //fill array with correct data
+    fill_metronome_buffer(metronome_buffer, buffer_size);
+
+    fprintf(stdout, "Buffer size: %d, high click size: %d, low click size:%d\n", 
+            buffer_size, click_high_size, click_low_size);
+
+    // Play the metronome buffer in its entirety 
+    play_countin(metronome_buffer, buffer_size);
+
+    // Delete buffers
+    delete[] metronome_buffer;
 }
 
 int close_networkbb_fd()
@@ -609,9 +997,9 @@ int write_to_shared_mem()
     return 0;
 }
 
-int ping_big_brother()
+int ping_network_backbone()
 {
-    int destination = BIG_BROTHER;
+    int destination = BACKBONE_SERVER;
     int err = (stage1_data_ready(networkbb_fd, destination, num_bytes_read) == SUCCESS) ? 0 : 1;
     if (err)
     {
@@ -621,12 +1009,15 @@ int ping_big_brother()
     return err;
 }
 
-int main(int argc, char *argv[])
+int main(int, char *[])
 {
     // Register button press signal handler
     //signal(SIGINT, button_pressed);
     pthread_t thread;
     int err = 0;
+
+    // Set BPM to default 
+    bpm.store(60, std::memory_order::memory_order_seq_cst);
 
     // Initialize the server connection
     if (connect_networkbb() == FAILED)
@@ -644,11 +1035,10 @@ int main(int argc, char *argv[])
 
     //button has not been pressed before
     is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
+    main_thread_stop_status.store(false, std::memory_order::memory_order_seq_cst);
 
     while (1)
     {
-
-        //is_button_pressed.store(false, std::memory_order::memory_order_seq_cst);
         await_button_press();
 
         // Init the capture handle
@@ -658,16 +1048,28 @@ int main(int argc, char *argv[])
             return err;
         }
 
+         // Init the capture handle
+        err = init_playback_handle();
+        if (err)
+        {
+            return err;
+        }
+
+        // Play the countin 
+        metronome();
+
         // Prepare the capture handle
         if ((err = prepare_capture_device()))
         {
             return err;
         }
 
-        // Await a button press
-        //await_button_press();
+        // Re-open the playback device and record
+        if ((err = init_playback_handle()))
+        {
+            return err;
+        }
 
-        // Record
         if ((err = record_until_button_press()))
         {
             break;
@@ -680,11 +1082,12 @@ int main(int argc, char *argv[])
         }
 
         // Inform the network backbone that data is ready
-        if ((err = ping_big_brother()))
+        if ((err = ping_network_backbone()))
         {
             break;
         }
 
+        main_thread_stop_status.store(true, std::memory_order_seq_cst);
         is_button_pressed_cv.notify_one();
         // !TEMP
         fprintf(stdout, "Num bytes read: %d\n", num_bytes_read);
