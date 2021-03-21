@@ -78,6 +78,8 @@ static std::atomic_bool output_recorded_audio;
 // High when the backing track received from Stage 2 should be played.
 static std::atomic_bool output_generated_audio;
 
+static std::thread producer_thread;
+
 void await_network_backbone()
 {
     // Acquire the mutex and await the condition variable
@@ -132,7 +134,6 @@ void *wait_button_pressed(void *thread_args)
             break;
         case STOP:
             stop_recording();
-            send_ack(networkbb_fd, this_destination, this_stage_id);
             break;
         default:
             std::cout << " Sorrry kid wrong command\n";
@@ -187,7 +188,7 @@ static int await_message_from_backbone()
 static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_size)
 {
     // Ensure that the two sizes are the same - if not, we have a lineup issue
-    if (midi_size != wav_size)
+    if (midi_size * 2 != wav_size)
     {
         fprintf(stderr, "Audio source size mismatch! midi is %d bytes; wav is %d bytes!\n", midi_size, wav_size);
         return 1;
@@ -197,7 +198,7 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
     int16_t norm_midi_max = INT16_MIN, norm_midi_min = INT16_MAX;
     int16_t norm_wav_max = INT16_MIN, norm_wav_min = INT16_MAX;
 
-    for (int i = 44; i < midi_size; i += 2)
+    for (int i = 44; i < wav_size; i += 2)
     {
         int midi_index = i / 2;
         int16_t midi_word_int = midi[midi_index] | (midi[midi_index + 1] << 8);
@@ -225,7 +226,7 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
     double norm_max_avg = (norm_midi_max + norm_wav_max / 2);
 
     // Skip the headers - loop over the rest of the content
-    for (int i = 44, j = 42; i < midi_size; i += 2)
+    for (int i = 44, j = 42; i < wav_size; i += 2)
     {
         // Iterate over the drum data half as fast to simulate mono->stereo conversion
         if (i % 4 == 0)
@@ -652,11 +653,10 @@ static void async_record_until_button_press(int loop_size_bytes)
 
         if (!spawned_thread && num_bytes_read == BYTES_PER_PERIOD * 4)
         {
-            std::thread t([&]() { 
+            producer_thread = std::thread([&]() { 
                     fprintf(stdout, "Starting to play: recorded %d bytes\n", num_bytes_read); 
                     while (play_loop(loop_size_bytes) == 0); 
                 });
-            t.detach();
             spawned_thread = true;
         }
 
@@ -664,23 +664,14 @@ static void async_record_until_button_press(int loop_size_bytes)
         {
             num_bytes_read = 0;
         }
-    }
-
-    if ((err = snd_pcm_close(playback_handle)) < 0)
-    {
-        print_error(err, "Could not close the playback device!");
-        return;
-    } else 
-    {
-        fprintf(stdout, "%s\n", "playback handle closed");
-    }   
+    }  
 }
 
-static int close_playback_handle()
+static int close_ALSA_handles()
 {
     // Flush the playback handle - this is a BUSY wait! Do better!
     //while (snd_pcm_drain(playback_handle) == -EAGAIN);
-    return snd_pcm_close(playback_handle);
+    return snd_pcm_close(playback_handle) | snd_pcm_close(capture_handle);
 }
 
 static int loop_audio_until_cancelled(int loop_size)
@@ -716,7 +707,7 @@ static int loop_audio_until_cancelled(int loop_size)
     // Mark that audio is no longer playing
     //is_audio_playing.store(false, std::memory_order::memory_order_seq_cst);
 
-    return err | close_playback_handle();
+    return err;
 }
 
 int delete_shared_memory(void *mem)
@@ -780,7 +771,10 @@ int main(int argc, char **argv)
         }
 
 #warning *** WAV MEMBLK SIZE ASSUMED TO BE == TO MIDI MEMBLK!!! ***
-        int wav_size = midi_size;
+        int wav_size = 921600;
+        midi_size = wav_size / 2;
+        
+        //int wav_size = midi_size * 2;
         uint8_t *wav = (uint8_t *)get_wav_mem_blk(0);
         if (!wav)
         {
@@ -797,10 +791,23 @@ int main(int argc, char **argv)
 
         // Loop the audio until told not to (!TODO ???)
 
-        if ((err = loop_audio_until_cancelled(midi_size)))
+        if ((err = loop_audio_until_cancelled(wav_size)))
         {
             fprintf(stderr, "loop audio returned %d!\n", err);
         }
+
+        // Close the ALSA handles
+        if ((err = close_ALSA_handles())) 
+        {
+            print_error(err, "Closing ALSA handles at the end of a loop failed!");
+            return 1;
+        }
+
+        // Send the ACK to big brother
+        producer_thread.join();
+        int this_stage_id = STAGE3;
+        int this_destination = BIG_BROTHER; 
+        send_ack(networkbb_fd, this_destination, this_stage_id);
 
         // Close and delete the shared memory - we're done with the old data
         detach_mem_blk(midi);

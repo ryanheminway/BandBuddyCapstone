@@ -129,6 +129,10 @@ void callback_stage_3(BigBrotherStateMachine::State)
 
 int main(int, char*[])
 {
+    // Clean shared mem 
+    destroy_wav_mem_blk();
+    destroy_midi_mem_blk();
+
     // Register the callbacks for each state
     state_machine.register_callback(BigBrotherStateMachine::State::INIT, callback_init);
     state_machine.register_callback(BigBrotherStateMachine::State::STAGE_1, callback_stage_1);
