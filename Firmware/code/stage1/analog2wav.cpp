@@ -17,6 +17,8 @@
 #include "band_buddy_msg.h"
 #include "band_buddy_server.h"
 
+#define DEFAULT_BPM 100
+
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
 
@@ -66,6 +68,10 @@ static std::mutex is_button_pressed_mutex;
 static std::condition_variable is_button_pressed_cv;
 
 static constexpr int met_delay_at_start = 192000 / 200;
+
+// Metronome buffer into which clicks are populated
+static uint8_t* metronome_buffer;
+static int metronome_buffer_size;
 
 //click high array and size
 static uint8_t *click_high = nullptr;
@@ -151,8 +157,9 @@ void *wait_button_pressed(void *thread_args)
             break;
         case STOP:
             stop_recording();
+
             //wait for main thread to finish
-            await_button_press();
+            await_network_backbone_notify_complete();
             send_ack(networkbb_fd, this_destination, this_stage_id);
             break;
         case WEBSERVER_DATA:
@@ -444,7 +451,7 @@ int close_capture_handle()
 
 void async_playback_until_button_press();
 
-int record_until_button_press()
+int record_until_button_press(int num_bytes_to_record)
 {
     int err;
     if ((err = snd_pcm_start(capture_handle)) < 0)
@@ -455,7 +462,7 @@ int record_until_button_press()
 
     bool is_consumer_thread_spawned = false;
     num_bytes_read = 0;
-    while (num_bytes_read + BYTES_PER_PERIOD < WAV_BUFFER_SIZE && is_button_pressed.load(std::memory_order::memory_order_relaxed))
+    while (num_bytes_read + BYTES_PER_PERIOD < num_bytes_to_record && is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
         // Await a new set of data
         if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
@@ -498,11 +505,12 @@ int record_until_button_press()
         }
     }
 
-    // If the button has not been pressed, we ran out of space!
+    // If the button has not been pressed, we must notify big brother to cycle its state machine
     if (is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
-        fprintf(stderr, "%s", "Recording ran out of memory!\n");
-        return 0;
+        //fprintf(stderr, "%s", "Recording ran out of memory!\n");
+        fprintf(stdout, "%s\n", "Recording duration reached - notify BB that button was pressed!");
+        is_button_pressed.store(false, std::memory_order_seq_cst);
     }
 
 #warning *** MEMORY OVERFLOW TEMPORARILY DOES NOT ERROR - FIX THIS POST DEBUG SESSION!!!
@@ -525,6 +533,9 @@ void async_playback_until_button_press()
     int err = 0;
     int num_bytes_written = 0;
     bool overtook = false;
+
+    uint8_t* sync_buffer = new uint8_t[BYTES_PER_PERIOD];
+
     while (num_bytes_written + BYTES_PER_PERIOD < WAV_BUFFER_SIZE && is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
         if (!overtook && num_bytes_written >= num_bytes_read)
@@ -563,8 +574,15 @@ void async_playback_until_button_press()
         // Cap the frames to write
         frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
 
+        // Copy the data to write into the sync buffer and add the metronome data at the current write pointer mod one measure length
+        memcpy(sync_buffer, buffer + num_bytes_written, frames_to_deliver * BYTES_PER_FRAME);
+        for (int i = 0; i < frames_to_deliver * BYTES_PER_FRAME; i++)
+        {
+            sync_buffer[i] += metronome_buffer[(num_bytes_written + i) % metronome_buffer_size];
+        }
+
         int frames_written;
-        if ((frames_written = snd_pcm_writei(playback_handle, buffer + num_bytes_written, frames_to_deliver)) != frames_to_deliver)
+        if ((frames_written = snd_pcm_writei(playback_handle, sync_buffer, frames_to_deliver)) != frames_to_deliver)
         {
             if (frames_written == -EPIPE)
             {
@@ -595,10 +613,12 @@ void async_playback_until_button_press()
 
 
 static inline int calculate_num_sample(int bpm){
-    return (SAMPLE_RATE * 4) / (bpm / 60);
+    float bpm_float = (float)bpm;
+    float denom = bpm_float / 60.;
+    return (int)((SAMPLE_RATE * 4) / denom);
 }
 
-static inline int calculate_buffer_size(int samples_per_measure)
+static inline int calculate_met_measure_buffer_size(int samples_per_measure)
 {
     return (samples_per_measure *  NUM_CHANNELS * BYTES_PER_SAMPLE) + met_delay_at_start;
 }
@@ -711,31 +731,33 @@ static void play_countin(uint8_t* metronome_buffer, int buffer_size)
     }
 } 
 
-static void metronome()
+static int metronome()
 {
-    //get number of samples 
-    int samples_per_measure = calculate_num_sample(bpm);
+    //get number of samples
+    int samples_per_measure = calculate_num_sample(bpm.load(std::memory_order_relaxed));
 
     //total number of bytes
-    int buffer_size =   calculate_buffer_size(samples_per_measure);
+    metronome_buffer_size =   calculate_met_measure_buffer_size(samples_per_measure);
 
     //allocate buffer 
-    uint8_t *metronome_buffer = new uint8_t[buffer_size];
+    delete[] metronome_buffer;
+    metronome_buffer = new uint8_t[metronome_buffer_size];
 
     // Fill the click buffers
     open_tick_files();
 
     //fill array with correct data
-    fill_metronome_buffer(metronome_buffer, buffer_size);
+    fill_metronome_buffer(metronome_buffer, metronome_buffer_size);
 
     fprintf(stdout, "Buffer size: %d, high click size: %d, low click size:%d\n", 
-            buffer_size, click_high_size, click_low_size);
+            metronome_buffer_size, click_high_size, click_low_size);
 
     // Play the metronome buffer in its entirety 
-    play_countin(metronome_buffer, buffer_size);
+    play_countin(metronome_buffer, metronome_buffer_size);
 
-    // Delete buffers
-    delete[] metronome_buffer;
+    // Return the number of samples for 'n' measures of recording
+    #warning "*** NUM SAMPLES ASSUMED TO BE 2 FOR NOW ***"
+    return metronome_buffer_size * 2;
 }
 
 int close_networkbb_fd()
@@ -1012,7 +1034,7 @@ int write_to_shared_mem()
 int ping_network_backbone()
 {
     int destination = BACKBONE_SERVER;
-    int err = (stage1_data_ready(networkbb_fd, destination, num_bytes_read) == SUCCESS) ? 0 : 1;
+    int err = (stage1_data_ready(networkbb_fd, destination, num_bytes_read + 44) == SUCCESS) ? 0 : 1;
     if (err)
     {
         fprintf(stderr, "%s\n", "Failed to notify network backbone!");
@@ -1029,7 +1051,7 @@ int main(int, char *[])
     int err = 0;
 
     // Set BPM to default 
-    bpm.store(60, std::memory_order::memory_order_seq_cst);
+    bpm.store(DEFAULT_BPM, std::memory_order::memory_order_seq_cst);
 
     // Initialize the server connection
     if (connect_networkbb() == FAILED)
@@ -1068,7 +1090,7 @@ int main(int, char *[])
         }
 
         // Play the countin 
-        metronome();
+        int num_bytes_to_record = metronome();
 
         // Prepare the capture handle
         if ((err = prepare_capture_device()))
@@ -1082,7 +1104,7 @@ int main(int, char *[])
             return err;
         }
 
-        if ((err = record_until_button_press()))
+        if ((err = record_until_button_press(num_bytes_to_record)))
         {
             break;
         }

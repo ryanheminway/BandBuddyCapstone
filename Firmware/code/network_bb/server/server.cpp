@@ -21,7 +21,7 @@ The skeleton code can be found at https://www.geeksforgeeks.org/socket-programmi
 #define TRUE 1
 #define FALSE 0
 #define PORT 8080
-#define MAX_CLIENTS 4
+#define MAX_CLIENTS 5
 #define MAX_BUFFER_SIZE 1024
 
 int main(int argc, char *argv[])
@@ -188,7 +188,7 @@ int main(int argc, char *argv[])
 
                             if (recieve_stage1_fbb(sd, payload_size, wav_data_sz) != FAILED)
                             {
-                                send_wav_shared_mem(client_socket[destination], wav_data_sz);
+                                send_wav_shared_mem(client_socket[STAGE2], wav_data_sz);
                             }
                             else
                             {
@@ -196,11 +196,17 @@ int main(int argc, char *argv[])
                             }
 
                             break;
-                        case STAGE2_DATA_READY:
+                        case STAGE2_DATA_READY: {
                             std::cout << "Processing stage 2 data ready" << std::endl;
                             recieve_and_mem_shared_stage2_data(sd, payload_size);
-                            stage2_data_ready(client_socket[destination], payload_size);
+                            stage2_data_ready(client_socket[STAGE3], payload_size);
+
+                            int ack_dest = BIG_BROTHER;
+                            int ack_src = BACKBONE_SERVER;
+                            int index = BIG_BROTHER;
+                            send_ack(client_socket[index], ack_dest, ack_src);
                             break;
+                        }
                         case STAGE3_DATA_READY:
                             // TODO: stage3_data_ready function
                             std::cout << "Processing stage 2 data ready" << std::endl;

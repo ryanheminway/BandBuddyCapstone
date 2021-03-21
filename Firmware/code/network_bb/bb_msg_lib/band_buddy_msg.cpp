@@ -158,10 +158,10 @@ int stage1_data_ready(int &socket_fd, int &destination, int size){
 
 int stage2_data_ready(int &socket_fd, int &size){
     int ret = FAILED;
-    int cmd = STAGE3_DATA_READY;
+    int cmd = STAGE2_DATA_READY;
     int destination = STAGE3;
     int payload_size; 
-    int stage_id = STAGE2;
+    int stage_id = BACKBONE_SERVER;
     int data_ready = 1;
     flatbuffers::FlatBufferBuilder builder;  
 

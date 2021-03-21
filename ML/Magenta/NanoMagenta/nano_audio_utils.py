@@ -256,6 +256,5 @@ def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=Fals
 
 
 def midi_to_wav(data, sample_rate, sf2_path=None):
-    #wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate, sf2_path=sf2_path))
-    wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate))
+    wav_data = librosa.util.normalize(midi_synth.fluidsynth(data, sample_rate=sample_rate, sf2_path=sf2_path))
     return wav_data
