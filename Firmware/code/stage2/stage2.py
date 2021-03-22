@@ -37,12 +37,14 @@ class Stage2Handler():
         # Trying to convert raw wav bytearray to nparray
         np_wav_data, sr = audio.read_wav_data(data=data)
         # print("Converted to np array: ", np_wav_data)
-        # print("Len of converted: ", len(np_wav_data))
-        # print("SR of converted: ", sr)
+        print("Len of converted: ", len(np_wav_data))
+        print("SR of converted: ", sr)
+        size_to_keep = (int)((len(np_wav_data) - 44) / 2) + 44
+        print("size we wanna keep:", size_to_keep)
 
         print("Generating drum track...\n")
         # Apply trained model to input track. Only care about drum audio on return
-        full_drum_audio = audio.audio_to_drum(np_wav_data, sr, tempo=self.tempo
+        full_drum_audio = audio.audio_to_drum(np_wav_data, sr, tempo=self.tempo,
                 velocity_threshold=self.velocity_threshold,
                 temperature=self.temperature, model=model)
 
@@ -54,6 +56,9 @@ class Stage2Handler():
         # print("Duplicated into stereo data")
         print("Turning it into wav!")
         full_drum_audio = audio.midi_to_wav(full_drum_audio, sr, soundpack_file)
+        print("type: ", type(full_drum_audio))
+        print("len of nparray: ", len(full_drum_audio))
+        # full_drum_audio = full_drum_audio[:size_to_keep]
 
         print("Writing drum track to disk for good measure")
         sf.write("model_out_drums.wav", full_drum_audio, sr, subtype='PCM_24')
@@ -66,6 +71,7 @@ class Stage2Handler():
         # normalize float range to int16 space  
         write(byte_io, sr, (full_drum_audio * 32767).astype(np.int16))
         output_drum_wav = byte_io.read()
+
 
         return output_drum_wav
 
@@ -82,6 +88,8 @@ class Stage2Handler():
 
 
 def main():
+    byt = bytes("this is a test", encoding="utf-8")
+
     host = "129.10.159.188"
     port = 8080
     handler = Stage2Handler()
@@ -113,6 +121,7 @@ def main():
             if (command == network.STAGE1_DATA):
                 print("STAGE1 DATA")
                 drum_data = handler.handle_wav_data(buff, model)
+                print("type: ", type(drum_data))
 
                 # print("SENDING DATA: ", drum_data)
                 print("SENDING LEN: ", len(drum_data))
@@ -125,8 +134,8 @@ def main():
                 print("WEBSERVER DATA")
                 handler.handle_webserver_data(buff)
             # (TODO) once request message is added, we can respond with current handler params to webserver
-            #elif (command == network.WEBSERVER_REQUEST):
-            #    network.send_webserver_data(socket_fd, handler.genre, handler.soundpack, handler.tempo, handler.temperature, 0, 0, network.WEB_SERVER_STAGE, network.STAGE2)
+            elif (command == network.REQUEST_PARAMS):
+                network.send_webserver_data(socket_fd, handler.genre, handler.soundpack, handler.tempo, handler.temperature, 0, 0, network.WEB_SERVER_STAGE, network.STAGE2)
 
         except KeyboardInterrupt:
             print("Shutting down stage2")

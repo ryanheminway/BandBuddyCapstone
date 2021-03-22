@@ -179,7 +179,7 @@ def audio_to_drum(y, sr, tempo, velocity_threshold, temperature, model, force_sy
         # Approximate tempo
         # Don't approximate tempo ever
         #tempo = librosa.beat.tempo(onset_envelope=librosa.onset.onset_strength(current_section, sr=sr), max_tempo=180)[
-            0]
+        #    0]
 
         beat_length = 60 / tempo
         two_bar_length = beat_length * 8
