@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/brick/bandbuddy/BandBuddyCapstone/Firmware/code/stage2')
+sys.path.insert(0, '/home/patch/bandbuddy/BandBuddyCapstone/Firmware/code/stage2')
 import band_buddy_msg
 from django.shortcuts import render
 from django.views.generic import TemplateView, CreateView
@@ -27,13 +27,20 @@ def update_genre (request):
     if request.POST.get('guitar','0') == 'on':
         guitar = True
 
-    #if genre == '0':
-        #call update function here and await responses from each stage to update form
-        
+    host = '127.0.0.1'
+    port = 8080
+    socket_fd = band_buddy_msg.connect_and_register(host, port, band_buddy_msg.WEB_SERVER_STAGE)  
+
+    if genre == '0':
+        band_buddy_msg.request_params(socket_fd,band_buddy_msg.WEB_SERVER_STAGE,band_buddy_msg.STAGE2)
+        cmd, message = band_buddy_msg.recv_msg(socket_fd)
+        print(message.Genre())
+        print(message.Timbre())
+        print(message.Tempo())
+        print(message.Temperature())
+
     if genre != '0':
-        host = '127.0.0.1'
-        port = 8080
-        socket_fd = band_buddy_msg.connect_and_register(host, port, band_buddy_msg.WEB_SERVER_STAGE)    
+          
         print(genre)
         print(timbre)
         print(tempo)
