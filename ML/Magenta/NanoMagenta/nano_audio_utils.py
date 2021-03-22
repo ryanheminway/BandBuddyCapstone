@@ -62,8 +62,8 @@ def drumify(s, model, temperature=1.0):
 
 
 def drumify_v2(s, model, temperature=1.0):
-    _, encoding = model.encode([s])
-    decoded = model.decode(encoding, s, length=32, temperature=temperature)
+    mu, sigma, encoding = model.encode([s])
+    decoded = model.decode(encoding)
     return decoded[0]
 
 

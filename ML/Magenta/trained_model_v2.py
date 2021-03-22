@@ -36,11 +36,7 @@ class TrainedModel(object):
   Attributes:
     config: The Config to build the model graph with.
     batch_size: The batch size to build the model graph with.
-    checkpoint_dir_or_path: The directory containing checkpoints for the model,
-      the most recent of which will be loaded, or a direct path to a specific
-      checkpoint.
   """
-
   def __init__(self, config, model, batch_size):
     self._config = copy.deepcopy(config)
     self._config.data_converter.set_mode('infer')
@@ -88,10 +84,8 @@ class TrainedModel(object):
 
     Args:
       input_tensors: Collection of input tensors to encode.
-      lengths: Collection of lengths of input tensors.
-      control_tensors: Collection of control tensors to encode.
     Returns:
-      The encoded `z`, `mu`, and `sigma` values.
+      The encoded `mu, `sigma, and `z` values.
     Raises:
        RuntimeError: If called for a non-conditional model.
     """
@@ -116,15 +110,11 @@ class TrainedModel(object):
 
     return self.model.encoder(inputs_array)
 
-  def decode(self, z, length=None, temperature=1.0, c_input=None):
+  def decode(self, z):
     """Decodes a collection of latent vectors into NoteSequences.
 
     Args:
       z: A collection of latent vectors to decode.
-      length: The maximum length of a sample in decoder iterations. Required
-        if end tokens are not being used.
-      temperature: The softmax temperature to use (if applicable).
-      c_input: Control sequence (if applicable).
     Returns:
       A list of decodings as NoteSequence objects.
     Raises:
@@ -132,6 +122,7 @@ class TrainedModel(object):
       ValueError: If `length` is not specified and an end token is not being
         used.
     """
+    print("decode input array: ", tf.shape(self.inputs_array))
     tensors = self.decode_to_tensors(z, self.inputs_array)
     return self._config.data_converter.from_tensors(tensors.samples)
 
@@ -140,19 +131,11 @@ class TrainedModel(object):
 
     Args:
       z: A collection of latent vectors to decode.
-      length: The maximum length of a sample in decoder iterations. Required
-        if end tokens are not being used.
-      temperature: The softmax temperature to use (if applicable).
-      c_input: Control sequence (if applicable).
-      return_full_results: If true will return the full decoder_results,
-        otherwise it will return only the samples.
+      x_input: the original input tensors passed to encoder
     Returns:
-      If return_full_results is True, will return the full decoder_results list,
-      otherwise it will return the samples from the decoder as a 2D numpy array.
+      Will return the samples from the decoder as a 2D numpy array.
     Raises:
       RuntimeError: If called for a non-conditional model.
-      ValueError: If `length` is not specified and an end token is not being
-        used.
     """
     if not self._config.hparams.z_size:
       raise RuntimeError('Cannot decode with a non-conditional model.')

@@ -2,6 +2,7 @@ import os
 
 import tensorflow as tf
 import tensorflow.keras as tfk
+import tensorflow_probability as tfp
 
 import configs as cfg
 import data
@@ -16,11 +17,12 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 # is required by Keras model.compile and subsequently model.build
 @tf.function
 def loss_term(input_seq, output_seq, seq_length, groove_model):
-    (z, z_sample) = groove_model.encoder(input_seq)
+    (mu, sigma, z_sample) = groove_model.encoder(input_seq)
     reconstruct_loss = reconstruction_loss(groove_model.decoder, input_seq, output_seq, seq_length, z_sample)
     r_loss = tf.reduce_mean(reconstruct_loss)
     #kl_loss = tf.math.reduce_sum(groove_model.losses)  # vae.losses is a list
     # Separate function (not model.loss term) to avoid accessing graph tensor
+    z = tfp.distributions.MultivariateNormalDiag(loc=mu, scale_diag=sigma)
     kl_loss = groove_model.kl_loss(z)
     total_vae_loss = r_loss + kl_loss
     return total_vae_loss
@@ -61,7 +63,6 @@ model = GrooVAE(groovae_cfg.hparams, data_converter.output_depth, True)
 
 optimizer = tfk.optimizers.Adam(lr)
 #model.compile(optimizer, loss=loss_term())
-#model.build(input_shape=(1,32,27))
 loss_metric = tfk.metrics.Mean() # Sum?
 
 """========================= END TRAINING / MODEL PARAMS =================================="""
@@ -139,7 +140,6 @@ for epoch in range(epochs):
     # Every epoch, loop over all batches in training
     for batch in iterator:
         batch_data = resize_input_tensors(groovae_cfg, batch[0], batch[1], batch[2], batch[3])
-        #print("INPUT SEQ: ", tf.shape(batch_data["input_sequence"]))
 
         # Some data processing as in base_model.py/MusicVAE/_compute_model_loss
         input_sequence = tf.cast(batch_data["input_sequence"], dtype=tf.float32)
@@ -148,8 +148,9 @@ for epoch in range(epochs):
         input_sequence = input_sequence[:, :max_sequence_length]
         output_sequence = output_sequence[:, :max_sequence_length]
         sequence_length = tf.minimum(batch_data["sequence_length"], max_sequence_length)
-        if (sequence_length != max_sequence_length):
-            print("Sequence length !! : ", sequence_length)
+        # Never had this trigger, so I'm commenting out
+        # if (sequence_length != max_sequence_length):
+        #     print("Sequence length !! : ", sequence_length)
 
         optimizer.lr.assign(get_lr(step, groovae_cfg))
 
@@ -168,14 +169,17 @@ for epoch in range(epochs):
         # model.build to set input shapes for model.save
         # (TODO) we call model.build but .save still fails saying we didn't set input shapes?
         #model.build(input_shape=(1, 32, 27))
-        #model.save("./model_test_saved/")
         if epoch % 10 == 0:
             #model.save("./model_test_saved/")
             # (TODO) Sometimes this fails due to "folder: access denied"???
             model.save_weights("./model_test_checkpoint/groovae_ckpt")
-        if (elbo > -50):
+        if (elbo > -200):
             model.save_weights("./model_test_checkpoint/groovae_ckpt")
             break
+
+# (TODO) Using predict seems to work to set input_shapes (where .build was failing) but now we get different errors in save
+model.predict(input_sequence, batch_size=1)
+model.save("./model_test_saved/")
 print("DONE TRAINING LOOP")
 
 

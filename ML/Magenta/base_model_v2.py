@@ -63,7 +63,7 @@ class GrooVAEDecoder(tfk.Model):
         self.is_training = is_training
         self.dropout_prob = (1 - self.hparams.dropout_keep_prob) if is_training else 0
         # Initialize decoder RNN cells
-        dec_rnn_size = hparams.dec_rnn_size # dec_rnn_size = [256, 256]
+        dec_rnn_size = self.hparams.dec_rnn_size  # dec_rnn_size = [256, 256]
         dec_cells = []
         for i in range(len(dec_rnn_size)):
             lstm_cell = tfk.layers.LSTMCell(dec_rnn_size[i], dropout=self.dropout_prob)
@@ -75,20 +75,20 @@ class GrooVAEDecoder(tfk.Model):
         # Sampler helper using teacher forcing
         self.sampler = tfa.seq2seq.TrainingSampler()
         # Input shape for decoder: correct input shape? 1.x model it is (283,) (256 + 27)
-        self.inp_shape = (283,) # self.sampler.inputs.shape[2:] # doesn't exist
+        self.inp_shape = (283,)  # self.sampler.inputs.shape[2:] # doesn't exist
         # Main decoder structure built using RNN cells, final output layer, and sampler
         self.decoder = tfa.seq2seq.BasicDecoder(parallel_iterations=1,
-            input_shape=self.inp_shape,
-            cell=self.dec_cell,
-            sampler=self.sampler,
-            output_layer=self.output_layer)
+                                                input_shape=self.inp_shape,
+                                                cell=self.dec_cell,
+                                                sampler=self.sampler,
+                                                output_layer=self.output_layer)
 
         # Vars required to compute initial state from decoder RNN
         self.flat_state_sizes = tf.nest.flatten(self.dec_cell.state_size)
         self.z_initial_layer = tfk.layers.Dense(sum(self.flat_state_sizes),
-                                           activation=tf.tanh,
-                                           kernel_initializer=tf.random_normal_initializer(stddev=0.001),
-                                           name="z_initial_state")
+                                                activation=tf.tanh,
+                                                kernel_initializer=tf.random_normal_initializer(stddev=0.001),
+                                                name="z_initial_state")
 
     # Computes an initial RNN Cell state from embedding 'z'
     def initial_state_from_embedding(self, z):
@@ -101,6 +101,7 @@ class GrooVAEDecoder(tfk.Model):
     # Decodes from sample from latent vector z and decoder input x_input
     # CALL_INPUTS = [z, x_input]
     def call(self, call_inputs):
+        print("got call inputs: ", call_inputs)
         z = call_inputs[0]
         x_input = call_inputs[1]
 
@@ -120,6 +121,11 @@ class GrooVAEDecoder(tfk.Model):
                                                     cell=self.dec_cell,
                                                     sampler=self.sampler,
                                                     output_layer=self.output_layer)
+        # For training cases, the input gets resized to include the embedding
+        else:
+            repeated_z = tf.tile(
+                tf.expand_dims(z, axis=1), [1, tf.shape(x_input)[1], 1])
+            x_input = tf.concat([x_input, repeated_z], axis=2)
 
         # Decode input
         final_output, final_state, final_lengths = tfa.seq2seq.dynamic_decode(
@@ -245,10 +251,6 @@ def reconstruction_loss(model, x_input, x_target, x_length, z):
     batch_size = int(x_input.shape[0])
     # print("BATCH_SIZE IN REC LOSS: ", batch_size)
 
-    repeated_z = tf.tile(
-        tf.expand_dims(z, axis=1), [1, tf.shape(x_input)[1], 1])
-    x_input = tf.concat([x_input, repeated_z], axis=2)
-
     decode_results = model.call([z, x_input])
     flat_x_target = flatten_maybe_padded_sequences(x_target, x_length)
     flat_rnn_output = flatten_maybe_padded_sequences(
@@ -299,6 +301,7 @@ class GrooVAEEncoder(tfk.Model):
             activation=tfk.activations.softplus,
             kernel_initializer=tfk.initializers.RandomNormal(stddev=0.001),
             name="encoder/sigma_layer")
+        super(GrooVAEEncoder, self).build(input_shape)
 
     # Perform forward pass through encoder
     def call(self, input_sequence):
@@ -311,8 +314,9 @@ class GrooVAEEncoder(tfk.Model):
         z = tfp.distributions.MultivariateNormalDiag(loc=mu, scale_diag=sigma)
         #print("Z DISTRIBUTION: ", z)
         z_sample = z.sample()
-        #print("Z SAMPLE: ", z)
-        return (z, z_sample)
+        #print("Z SAMPLE: ", z_sample)
+        # (NOTE Ryan) not allowed to return a tfp.distribution in certain circumstances, so just returning distro params
+        return (mu, sigma, z_sample)
 
 
 """========================= END DECODER =================================="""
@@ -337,9 +341,8 @@ class GrooVAE(tfk.Model):
 
     # Encoder sequence to Z distribution and then decode to output sequence
     def call(self, x_input):
-        #print("input seq: ", x_input)
         # Real Z distribution produced by encoder
-        (_, q_z_sample) = self.encoder(x_input)
+        (_, _, q_z_sample) = self.encoder(x_input)
         # self.add_loss(lambda: kl_cost) # KL Divergence as loss term
         output_seq = self.decoder([q_z_sample, x_input])
         return output_seq

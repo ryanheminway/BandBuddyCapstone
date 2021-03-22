@@ -15,10 +15,10 @@ latest_weights = tf.train.latest_checkpoint("./model_test_checkpoint/")
 print("Latest checkpoint: ", latest_weights)
 new_model = GrooVAE(groovae_cfg.hparams, data_converter.output_depth, False)
 new_model.load_weights(latest_weights)
-new_model.build(input_shape=(1, 32, 27))
-new_model.save("./model_test_saved/")
+#new_model.build(input_shape=(1, 32, 27))
+#new_model.save("./model_test_saved/")
 
-trained = t2.TrainedModel(groovae_cfg, new_model, 1, "./model_test_checkpoint/")
+trained = t2.TrainedModel(groovae_cfg, new_model, 1)
 temperature = 0.8
 velocity_threshold = 0.08
 
