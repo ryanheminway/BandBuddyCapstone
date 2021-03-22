@@ -1,4 +1,4 @@
-namespace Server.WebServer_Stage3;
+namespace Server.WebServerStage3;
 
 table WebServerStage3{
     drums: uint8 = 0;

@@ -7,6 +7,7 @@ import Server.Header.Header as header
 import Server.Header.Stages as stages 
 import Server.WebServer.WebServer as webserver
 import Server.WebServer_Stage3.WebServerStage3 as websever_stage3
+
 # My defines so users have easy access to flatbuffers types
 STAGE1 = stages.Stages().Stage1
 STAGE2 = stages.Stages().Stage2
@@ -19,6 +20,7 @@ STAGE1_DATA = cmds.Cmds().Stage1_data
 STAGE2_DATA_READY = cmds.Cmds().Stage2_data_ready
 STAGE3_DATA_READY = cmds.Cmds().Stage3_data_ready
 WEBSERVER_DATA = cmds.Cmds().Web_server_data
+REQUEST_PARAMS = cmds.Cmds().Web_server_request
 
 
 FAILED = -1
@@ -157,11 +159,8 @@ def send_webserver_data(sock_fd, genre, timbre, tempo, temperature, drums, guita
 
     if destination == STAGE3:
         webserver_fbb = create_webserver_stage3_fbb(drums, guitar)
-    elif destination == STAGE2 or destination == WEB_SERVER_STAGE:
+    else: 
         webserver_fbb = create_webserver_fbb(genre, timbre, tempo, temperature)
-    else:
-        print("Only stage2 and stage3 can process this message")
-        return FAILED
 
     payload_size = len(webserver_fbb)
     this_cmd = WEBSERVER_DATA 
@@ -183,16 +182,14 @@ def recv_wav_msg(sock_fd, header_fbb):
         return buf
 
 def recv_webserver_fbb(sock_fd, header_fbb):
-    #header_fbb = recv_header(sock_fd)
+    buf = get_payload(sock_fd, header_fbb.PayloadSize())
+    webserver_fbb = webserver.WebServer.GetRootAs(buf, 0)
+    return webserver_fbb
 
-    ##error checking 
-    if header_fbb.Destination() != stages.Stages().Stage2 and header_fbb.Cmd() != cmds.Cmds().Web_server_data :
-        return FAILED
-    else :
-        print("Payload size %d" %header_fbb.PayloadSize())
-        buf = get_payload(sock_fd, header_fbb.PayloadSize())
-        webserver_fbb = webserver.WebServer.GetRootAs(buf, 0)
-        return webserver_fbb
+def recv_webserver_stage3_fbb(sock_fd, header_fbb):
+    buf = get_payload(sock_fd, header_fbb.PayloadSize())
+    webserver_stage3_fbb = webserver_stage3.WebServerStage3.GetRootAs(buf, 0)
+    return webserver_fbb
 
 
 def send_msg(sock_fd, data, destination, cmd):
@@ -205,14 +202,27 @@ def send_msg(sock_fd, data, destination, cmd):
 
 def recv_msg(sock_fd):
     header_fbb = recv_header(sock_fd)
-    buf = None
+    fbb = None
 
     if header_fbb.Cmd() == cmds.Cmds().Stage1_data:
-        buf = recv_wav_msg(sock_fd, header_fbb)
+        fbb = recv_wav_msg(sock_fd, header_fbb)
     elif header_fbb.Cmd() == cmds.Cmds().Web_server_data:
-        buf = recv_webserver_fbb(sock_fd, header_fbb)
+        fbb = recv_webserver_data(sock_fd, header_fbb)
 
-    return header_fbb.Cmd(), buf
+    return header_fbb.Cmd(), fbb
+
+
+def request_params(sock_fd, stage_id, destination):
+    payload_size = 0
+    cmd = REQUEST_PARAMS
+    create_and_send_header(sock_fd, payload_size, destination, cmd, stage_id) 
+
+def recv_webserver_data(sock_fd, header_fbb):
+
+    if header_fbb.StageId == STAGE3:
+        recv_webserver_stage3_fbb(sock_fd, header_fbb)
+    else:
+        recv_webserver_fbb(sock_fd, header_fbb)
 
 
 # Unnecessary with stage2 module
@@ -278,5 +288,5 @@ def test_large_data():
     f.close()
     f_test.close()
 if __name__ == "__main__":
-    test_webserver()
+    test()
     
