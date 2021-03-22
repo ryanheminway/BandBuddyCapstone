@@ -13,4 +13,5 @@ class Cmds(object):
     Start = 7
     Button_pressed = 8
     ACK = 9
+    Web_server_request = 10
 
