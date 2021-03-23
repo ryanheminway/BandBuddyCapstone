@@ -124,8 +124,8 @@ def main():
                 print("WEBSERVER DATA")
                 handler.handle_webserver_data(buff)
             # (TODO) once request message is added, we can respond with current handler params to webserver
-            #elif (command == network.WEBSERVER_REQUEST):
-            #    network.send_webserver_data(socket_fd, handler.genre, handler.soundpack, handler.tempo, handler.temperature, 0, 0, network.WEB_SERVER_STAGE, network.STAGE2)
+            elif (command == network.REQUEST_PARAMS):
+                network.send_webserver_data(socket_fd, handler.genre, handler.soundpack, handler.tempo, handler.temperature, 0, 0, network.WEB_SERVER_STAGE, network.STAGE2)
 
         except KeyboardInterrupt:
             print("Shutting down stage2")

@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/patch/bandbuddy/BandBuddyCapstone/Firmware/code/stage2')
+sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/stage2')
 import band_buddy_msg
 from django.shortcuts import render
 from django.views.generic import TemplateView, CreateView
@@ -13,6 +13,10 @@ from .forms import GenreForm
 #coordinate with ryan
 genre_dict= {'rock': 0, "jazz": 1, "funk": 2, "pop": 3, "classical": 4}
 timbre_dict= {'timbre1':0, 'timbre2':1, 'timbre3':2, 'timbre4':3, 'timbre5':4}
+rev_genre_dict={0:'rock', 1:'jazz', 2:'funk', 3:'pop', 4:'classical'}
+rev_timbre_dict={0:'timbre1',1:'timbre2',2:'timbre3',3:'timbre4',4:'timbre5'}
+
+
 
 def update_genre (request):
     #have it send to stage 2 here
@@ -33,11 +37,17 @@ def update_genre (request):
 
     if genre == '0':
         band_buddy_msg.request_params(socket_fd,band_buddy_msg.WEB_SERVER_STAGE,band_buddy_msg.STAGE2)
+        #socket_fd = band_buddy_msg.connect_and_register(host, port, band_buddy_msg.WEB_SERVER_STAGE)
         cmd, message = band_buddy_msg.recv_msg(socket_fd)
+        print(message)
         print(message.Genre())
         print(message.Timbre())
         print(message.Tempo())
         print(message.Temperature())
+        #print("i love band buddy\n")
+        socket_fd.close()
+        
+        form = GenreForm(request.POST or None, genre=rev_genre_dict[message.Genre()],timbre=rev_timbre_dict[1],tempo=77,temperature=.77,drums=True,guitar=False) 
 
     if genre != '0':
           
@@ -49,7 +59,7 @@ def update_genre (request):
         print(guitar)
         band_buddy_msg.send_webserver_data(socket_fd, genre_dict[genre], timbre_dict[timbre], int(tempo), float(temperature), drums, guitar, band_buddy_msg.STAGE2, band_buddy_msg.WEB_SERVER_STAGE)
 
-    form = GenreForm(request.POST or None,genre='jazz',timbre='timbre3',tempo=77,temperature=0.77,drums=True,guitar=False) 
+        form = GenreForm(request.POST or None, genre=genre,timbre=timbre,tempo=tempo,temperature=temperature,drums=drums,guitar=guitar) 
     
     context = { 
         "form":form

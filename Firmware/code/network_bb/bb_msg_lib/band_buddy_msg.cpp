@@ -281,7 +281,7 @@ int send_through_message(int &socket_fd, int &destination, int &cmd, int &stage_
             return FAILED;
         }
 
-        create_and_send_header(socket_fd, payload_size, destination, cmd, stage_id);
+        create_and_send_header(dst_sock, payload_size, destination, cmd, stage_id);
         ret = send_payload(dst_sock, buff, payload_size);
 
         return ret;

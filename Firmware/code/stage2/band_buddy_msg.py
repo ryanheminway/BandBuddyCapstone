@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/patch/bandbuddy/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
+sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
 import socket
 import flatbuffers
 import Server.Header.Cmds as cmds 
@@ -183,13 +183,16 @@ def recv_wav_msg(sock_fd, header_fbb):
 
 def recv_webserver_fbb(sock_fd, header_fbb):
     buf = get_payload(sock_fd, header_fbb.PayloadSize())
+    print(len(buf))
     webserver_fbb = webserver.WebServer.GetRootAs(buf, 0)
+    print(webserver_fbb)
+    print(f'Genre {webserver_fbb.Genre()}')
     return webserver_fbb
 
 def recv_webserver_stage3_fbb(sock_fd, header_fbb):
     buf = get_payload(sock_fd, header_fbb.PayloadSize())
     webserver_stage3_fbb = webserver_stage3.WebServerStage3.GetRootAs(buf, 0)
-    return webserver_fbb
+    return webserver_stage3_fbb
 
 
 def send_msg(sock_fd, data, destination, cmd):
@@ -200,14 +203,27 @@ def send_msg(sock_fd, data, destination, cmd):
         ret = send_midi_data(sock_fd, data, destination)
     return ret
 
+def recv_webserver_data(sock_fd, header_fbb):
+    if header_fbb.StageId() == STAGE3:
+        print("webserver_stage3_fbb")
+        return recv_webserver_stage3_fbb(sock_fd, header_fbb)
+    else:
+        print("Webserver_fbb")
+        return recv_webserver_fbb(sock_fd, header_fbb)
+
 def recv_msg(sock_fd):
     header_fbb = recv_header(sock_fd)
+    print(header_fbb.PayloadSize())
     fbb = None
 
     if header_fbb.Cmd() == cmds.Cmds().Stage1_data:
+        print("Stage1_data")
         fbb = recv_wav_msg(sock_fd, header_fbb)
     elif header_fbb.Cmd() == cmds.Cmds().Web_server_data:
+        print("web_server_data")
         fbb = recv_webserver_data(sock_fd, header_fbb)
+    else:
+        print("Cmd could not be handled")
 
     return header_fbb.Cmd(), fbb
 
@@ -217,12 +233,7 @@ def request_params(sock_fd, stage_id, destination):
     cmd = REQUEST_PARAMS
     create_and_send_header(sock_fd, payload_size, destination, cmd, stage_id) 
 
-def recv_webserver_data(sock_fd, header_fbb):
 
-    if header_fbb.StageId == STAGE3:
-        recv_webserver_stage3_fbb(sock_fd, header_fbb)
-    else:
-        recv_webserver_fbb(sock_fd, header_fbb)
 
 
 # Unnecessary with stage2 module
@@ -287,6 +298,17 @@ def test_large_data():
 
     f.close()
     f_test.close()
+
+def test_request_params():
+   host = "127.0.0.1" 
+   port = 8080  
+   socket_fd = connect_and_register(host, port, WEB_SERVER_STAGE) 
+   request_params(socket_fd, WEB_SERVER_STAGE, STAGE3)
+
+   recv_msg(socket_fd)
+
+
+   print("Success")
 if __name__ == "__main__":
-    test()
+    test_request_params()
     
