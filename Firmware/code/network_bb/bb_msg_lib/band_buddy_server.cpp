@@ -245,7 +245,7 @@ int recieve_through_message(int &sock_fd, uint8_t *buff, int &payload_size){
    return ret;
 }
 
-int recieve_webserver_data(int &sock_fd, int &payload_sz, uint32_t &genre, uint32_t &timbre, uint32_t &tempo, double &temperature){
+int recieve_webserver_data(int &sock_fd, int &payload_sz, uint32_t &genre, uint32_t &timbre, uint32_t &tempo, double &temperature, uint32_t &bars){
     int ret = FAILED;
     uint8_t *buffer_ptr = NULL;
 
@@ -264,6 +264,7 @@ int recieve_webserver_data(int &sock_fd, int &payload_sz, uint32_t &genre, uint3
     timbre = webserver_fb->timbre();
     tempo = webserver_fb->tempo();
     temperature = webserver_fb->temperature();
+    bars = webserver_fb->bars();
 
 #ifdef DEBUG
     std::cout << "genre: " << genre << std::endl;

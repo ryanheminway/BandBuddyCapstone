@@ -126,9 +126,11 @@ static void handle_webserver_data(int &socket_fd, int &payload_size) {
     uint32_t timbre = 0;
     uint32_t tempo = 0;
     double temperature = 0;
+    uint32_t bars = 0;
 
-    recieve_webserver_data(socket_fd, payload_size, genre, timbre, tempo, temperature);
+    recieve_webserver_data(socket_fd, payload_size, genre, timbre, tempo, temperature, bars);
     fprintf(stdout, "temp  = %d\n", tempo);
+    fprintf(stdout, "bars = %d\n", bars);
     bpm.store(tempo, std::memory_order::memory_order_seq_cst);
 }
 

@@ -52,7 +52,14 @@ class WebServer(object):
             return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
         return 0.0
 
-def Start(builder): builder.StartObject(4)
+    # WebServer
+    def Bars(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Uint32Flags, o + self._tab.Pos)
+        return 0
+
+def Start(builder): builder.StartObject(5)
 def WebServerStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -72,6 +79,10 @@ def AddTemperature(builder, temperature): builder.PrependFloat64Slot(3, temperat
 def WebServerAddTemperature(builder, temperature):
     """This method is deprecated. Please switch to AddTemperature."""
     return AddTemperature(builder, temperature)
+def AddBars(builder, bars): builder.PrependUint32Slot(4, bars, 0)
+def WebServerAddBars(builder, bars):
+    """This method is deprecated. Please switch to AddBars."""
+    return AddBars(builder, bars)
 def End(builder): return builder.EndObject()
 def WebServerEnd(builder):
     """This method is deprecated. Please switch to End."""

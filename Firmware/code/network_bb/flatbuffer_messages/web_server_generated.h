@@ -18,7 +18,8 @@ struct WebServer FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_GENRE = 4,
     VT_TIMBRE = 6,
     VT_TEMPO = 8,
-    VT_TEMPERATURE = 10
+    VT_TEMPERATURE = 10,
+    VT_BARS = 12
   };
   uint32_t genre() const {
     return GetField<uint32_t>(VT_GENRE, 0);
@@ -32,12 +33,16 @@ struct WebServer FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   double temperature() const {
     return GetField<double>(VT_TEMPERATURE, 0.0);
   }
+  uint32_t bars() const {
+    return GetField<uint32_t>(VT_BARS, 0);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_GENRE) &&
            VerifyField<uint32_t>(verifier, VT_TIMBRE) &&
            VerifyField<uint32_t>(verifier, VT_TEMPO) &&
            VerifyField<double>(verifier, VT_TEMPERATURE) &&
+           VerifyField<uint32_t>(verifier, VT_BARS) &&
            verifier.EndTable();
   }
 };
@@ -58,6 +63,9 @@ struct WebServerBuilder {
   void add_temperature(double temperature) {
     fbb_.AddElement<double>(WebServer::VT_TEMPERATURE, temperature, 0.0);
   }
+  void add_bars(uint32_t bars) {
+    fbb_.AddElement<uint32_t>(WebServer::VT_BARS, bars, 0);
+  }
   explicit WebServerBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -74,9 +82,11 @@ inline flatbuffers::Offset<WebServer> CreateWebServer(
     uint32_t genre = 0,
     uint32_t timbre = 0,
     uint32_t tempo = 0,
-    double temperature = 0.0) {
+    double temperature = 0.0,
+    uint32_t bars = 0) {
   WebServerBuilder builder_(_fbb);
   builder_.add_temperature(temperature);
+  builder_.add_bars(bars);
   builder_.add_tempo(tempo);
   builder_.add_timbre(timbre);
   builder_.add_genre(genre);

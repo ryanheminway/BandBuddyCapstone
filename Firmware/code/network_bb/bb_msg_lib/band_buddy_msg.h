@@ -53,7 +53,7 @@ int stage1_start(int &socket_fd, int& stage_id);
 int stage1_stop(int &socket_fd, int& stage_id);
 int stage3_stop(int &socket_fd, int& stage_id);
 int send_webserver_data(int &socket_fd, int &stage_id, int &dest, uint32_t &genre,
-                        uint32_t &timbre, uint32_t &tempo, double &temperature);
+                        uint32_t &timbre, uint32_t &tempo, double &temperature, uint32_t &bars);
 int send_webserverstage3_data(int &socket_fd, int &stage_id, int &destination, uint8_t &drums, uint8_t &guitar);
 
 #endif //BAND_BUDDY_MSG

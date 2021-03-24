@@ -323,13 +323,13 @@ int stage3_stop(int &socket_fd, int& stage_id)
 }
 
 int send_webserver_data(int &socket_fd, int &stage_id, int &destination, uint32_t &genre,
-                        uint32_t &timbre, uint32_t &tempo, double &temperature) {
+                        uint32_t &timbre, uint32_t &tempo, double &temperature, uint32_t bars) {
     int ret = FAILED;
     int cmd = WEBSERVER_DATA;
     int payload_size;
     flatbuffers::FlatBufferBuilder builder;
 
-    auto webserver_msg = CreateWebServer(builder, genre, timbre, tempo, temperature);
+    auto webserver_msg = CreateWebServer(builder, genre, timbre, tempo, temperature, bars);
     builder.Finish(webserver_msg);
 
     auto webserver_msg_ptr = builder.GetBufferPointer();
