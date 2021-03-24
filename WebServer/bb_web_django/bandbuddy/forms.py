@@ -6,23 +6,10 @@
 #        model = MyModel
 #        fields = ['genre']
 
+import sys
 from django import forms
-
-GENRE_CHOICES = (
-    ('rock','ROCK'),
-    ('jazz', 'JAZZ'),
-    ('funk','FUNK'),
-    ('pop','POP'),
-    ('classical','CLASSICAL'),
-)
-
-TIMBRE_CHOICES = (
-    ('timbre1', 'TIMBRE1'),
-    ('timbre2', 'TIMBRE2'),
-    ('timbre3', 'TIMBRE3'),
-    ('timbre4', 'TIMBRE4'),
-    ('timbre5', 'TIMBRE5'),
-)
+sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/stage2')
+import band_buddy_msg, bb_types
 
 BAR_CHOICES = (
         ('2', '2 BARS'),
@@ -31,11 +18,11 @@ BAR_CHOICES = (
 
 class GenreForm(forms.Form):
  
-    genre = forms.ChoiceField(choices=GENRE_CHOICES)
-    timbre = forms.ChoiceField(choices=TIMBRE_CHOICES)
+    genre = forms.ChoiceField(choices=bb_types.GENRE_TO_ID)
+    timbre = forms.ChoiceField(choices=bb_types.TIMBRE_TO_ID)
     tempo = forms.IntegerField(max_value=200, min_value=30)
     temperature = forms.DecimalField(max_value=1, min_value=0)
-    bars = forms.ChoiceField(choices=BAR_CHOICES)
+    bars = forms.ChoiceField(choices=bb_types.BARS_TO_VALUE)
     drums = forms.BooleanField(required=False)
     guitar = forms.BooleanField(required=False)
 
