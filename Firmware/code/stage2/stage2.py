@@ -28,6 +28,7 @@ class Stage2Handler():
         self.velocity_threshold = 0.08
         self.drum_track = None
         self.socket_fd = None
+        self.bars = 2
 
     # Handles wav data representing an input track for the drum generation model:
     # 1) Applies given model to data to create drum track
@@ -74,10 +75,12 @@ class Stage2Handler():
         print("Got Genre: ", data.Genre())
         print("Got Temperature: ", data.Temperature())
         print("Got Tempo: ", data.Tempo())
+        print("Got bars: ", data.Bars())
         self.genre = data.Genre()
         self.soundpack = data.Timbre()
         self.temperature = data.Temperature()
         self.tempo = data.Tempo()
+        self.bars = data.Bars()
 
 
 def main():
@@ -125,7 +128,7 @@ def main():
                 handler.handle_webserver_data(buff)
             # (TODO) once request message is added, we can respond with current handler params to webserver
             elif (command == network.REQUEST_PARAMS):
-                network.send_webserver_data(socket_fd, handler.genre, handler.soundpack, handler.tempo, handler.temperature, 0, 0, network.WEB_SERVER_STAGE, network.STAGE2)
+                network.send_webserver_data(socket_fd, handler.genre, handler.soundpack, handler.tempo, handler.temperature, 0, 0, handler.bars, network.WEB_SERVER_STAGE, network.STAGE2)
 
         except KeyboardInterrupt:
             print("Shutting down stage2")
