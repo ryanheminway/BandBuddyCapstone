@@ -101,12 +101,12 @@ def main():
             print("Waiting for commands from network backbone\n")
             command, buff = network.recv_msg(socket_fd)
 
-            if buff == None:
+            if buff == None and command != network.REQUEST_PARAMS:
                 print("Could not get payload... program dying")
                 exit(1)
 
-            print("got command: ", command)
-            print("we want command: ", network.STAGE1_DATA)
+            #print("got command: ", command)
+            #print("we want command: ", network.STAGE1_DATA)
 
             # Message has wav data to process into a drum track
             if (command == network.STAGE1_DATA):

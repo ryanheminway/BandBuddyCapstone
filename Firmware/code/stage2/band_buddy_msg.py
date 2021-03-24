@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
+sys.path.insert(0, '/home/bandbuddy/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
 import socket
 import flatbuffers
 import Server.Header.Cmds as cmds 
@@ -223,7 +223,7 @@ def recv_msg(sock_fd):
         print("web_server_data")
         fbb = recv_webserver_data(sock_fd, header_fbb)
     else:
-        print("Cmd could not be handled")
+        print("Received header")
 
     return header_fbb.Cmd(), fbb
 
