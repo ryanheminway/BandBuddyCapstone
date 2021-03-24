@@ -124,7 +124,7 @@ static void send_webserverstage3_data(int &socket_fd, int &payload_size) {
     int this_stage_id = STAGE3;
     int this_destination = WEBSERVER;
 
-    drums = output_recorded_audio.load(std::memory_order::memory_order_relaxed);
+    guitar = output_recorded_audio.load(std::memory_order::memory_order_relaxed);
     drums = output_generated_audio.load(std::memory_order::memory_order_relaxed);
     send_webserverstage3_data(socket_fd, this_stage_id, this_destination, drums, guitar);
 }

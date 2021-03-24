@@ -26,10 +26,14 @@ def update_genre (request):
     temperature = request.POST.get('temperature','0')
     drums = False
     guitar = False
-    if request.POST.get('drums','0') == 'on':
+    if 'drums' in request.POST:
         drums = True
-    if request.POST.get('guitar','0') == 'on':
+        print("shrimpy g")
+    if 'guitar' in request.POST:
         guitar = True
+        print("brick")
+
+    print(request.POST)
 
     host = '127.0.0.1'
     port = 8080
@@ -38,16 +42,20 @@ def update_genre (request):
     if genre == '0':
         band_buddy_msg.request_params(socket_fd,band_buddy_msg.WEB_SERVER_STAGE,band_buddy_msg.STAGE2)
         #socket_fd = band_buddy_msg.connect_and_register(host, port, band_buddy_msg.WEB_SERVER_STAGE)
-        cmd, message = band_buddy_msg.recv_msg(socket_fd)
-        print(message)
-        print(message.Genre())
-        print(message.Timbre())
-        print(message.Tempo())
-        print(message.Temperature())
+        cmd, message2 = band_buddy_msg.recv_msg(socket_fd)
+        #print(message)
+        #print(message.Genre())
+        #print(message.Timbre())
+        #print(message.Tempo())
+        #print(message.Temperature())
+        band_buddy_msg.request_params(socket_fd,band_buddy_msg.WEB_SERVER_STAGE,band_buddy_msg.STAGE3)
+        cmd, message3 = band_buddy_msg.recv_msg(socket_fd)
         #print("i love band buddy\n")
+        print(message3.Drums())
+        print(message3.Guitar())
         socket_fd.close()
         
-        form = GenreForm(request.POST or None, genre=rev_genre_dict[message.Genre()],timbre=rev_timbre_dict[1],tempo=77,temperature=.77,drums=True,guitar=False) 
+        form = GenreForm(request.POST or None, genre=rev_genre_dict[message2.Genre()],timbre=rev_timbre_dict[message2.Timbre()],tempo=message2.Tempo(),temperature=message2.Temperature(),drums=bool(message3.Drums()),guitar=bool(message3.Guitar())) 
 
     if genre != '0':
           
@@ -57,8 +65,11 @@ def update_genre (request):
         print(temperature)
         print(drums)
         print(guitar)
+        
+        band_buddy_msg.send_webserver_data(socket_fd, genre_dict[genre], timbre_dict[timbre], int(tempo), float(temperature), drums, guitar, band_buddy_msg.STAGE1, band_buddy_msg.WEB_SERVER_STAGE)
         band_buddy_msg.send_webserver_data(socket_fd, genre_dict[genre], timbre_dict[timbre], int(tempo), float(temperature), drums, guitar, band_buddy_msg.STAGE2, band_buddy_msg.WEB_SERVER_STAGE)
-
+        band_buddy_msg.send_webserver_data(socket_fd, genre_dict[genre], timbre_dict[timbre], int(tempo), float(temperature), drums, guitar, band_buddy_msg.STAGE3, band_buddy_msg.WEB_SERVER_STAGE)
+        
         form = GenreForm(request.POST or None, genre=genre,timbre=timbre,tempo=tempo,temperature=temperature,drums=drums,guitar=guitar) 
     
     context = { 

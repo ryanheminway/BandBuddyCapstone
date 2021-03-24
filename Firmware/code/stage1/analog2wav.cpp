@@ -128,8 +128,10 @@ static void handle_webserver_data(int &socket_fd, int &payload_size) {
     double temperature = 0;
 
     recieve_webserver_data(socket_fd, payload_size, genre, timbre, tempo, temperature);
+    fprintf(stdout, "temp  = %d\n", tempo);
     bpm.store(tempo, std::memory_order::memory_order_seq_cst);
 }
+
 
 void *wait_button_pressed(void *thread_args)
 {

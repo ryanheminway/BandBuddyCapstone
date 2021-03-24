@@ -6,7 +6,7 @@ import Server.Header.Cmds as cmds
 import Server.Header.Header as header 
 import Server.Header.Stages as stages 
 import Server.WebServer.WebServer as webserver
-import Server.WebServer_Stage3.WebServerStage3 as websever_stage3
+import Server.WebServer_Stage3.WebServerStage3 as webserver_stage3
 
 # My defines so users have easy access to flatbuffers types
 STAGE1 = stages.Stages().Stage1
@@ -65,12 +65,12 @@ def create_webserver_fbb(genre, timbre, tempo, temperature):
 def create_webserver_stage3_fbb(drums, guitar):
     builder = flatbuffers.Builder(0)
 
-    websever_stage3.Start(builder)
-    websever_stage3.AddDrums(builder, drums)
-    websever_stage3.AddGuitar(builder, guitar)
-    websever_stage3_msg = websever_stage3.End(builder)
+    webserver_stage3.Start(builder)
+    webserver_stage3.AddDrums(builder, drums)
+    webserver_stage3.AddGuitar(builder, guitar)
+    webserver_stage3_msg = webserver_stage3.End(builder)
 
-    builder.Finish(websever_stage3_msg)
+    builder.Finish(webserver_stage3_msg)
 
     return builder.Output()
 
