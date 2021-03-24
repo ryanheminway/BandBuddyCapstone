@@ -25,8 +25,8 @@ TIMBRE_CHOICES = (
 )
 
 BAR_CHOICES = (
-        (2, '2 BARS'),
-        (4, '4 BARS'),
+        ('2', '2 BARS'),
+        ('4', '4 BARS'),
 )
 
 class GenreForm(forms.Form):
