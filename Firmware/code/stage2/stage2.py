@@ -38,13 +38,16 @@ class Stage2Handler():
         # Trying to convert raw wav bytearray to nparray
         np_wav_data, sr = audio.read_wav_data(data=data)
         # print("Converted to np array: ", np_wav_data)
-        # print("Len of converted: ", len(np_wav_data))
-        # print("SR of converted: ", sr)
+        print("Len of converted: ", len(np_wav_data))
+        print("SR of converted: ", sr)
+        size_to_keep = (int)((len(np_wav_data) - 44) / 2) + 44
+        print("size we wanna keep:", size_to_keep)
 
         print("Generating drum track...\n")
         # Apply trained model to input track. Only care about drum audio on return
-        full_drum_audio = audio.audio_to_drum(np_wav_data, sr, velocity_threshold=self.velocity_threshold,
-                                                          temperature=self.temperature, model=model)
+        full_drum_audio = audio.audio_to_drum(np_wav_data, sr, tempo=self.tempo,
+                velocity_threshold=self.velocity_threshold,
+                temperature=self.temperature, model=model)
 
         # Create abs path for soundpack
         soundpack_file = bb_types.SOUNDPACK_DIR + "/" + bb_types.ID_TO_SOUNDPACK[self.soundpack]
@@ -54,6 +57,9 @@ class Stage2Handler():
         # print("Duplicated into stereo data")
         print("Turning it into wav!")
         full_drum_audio = audio.midi_to_wav(full_drum_audio, sr, soundpack_file)
+        print("type: ", type(full_drum_audio))
+        print("len of nparray: ", len(full_drum_audio))
+        # full_drum_audio = full_drum_audio[:size_to_keep]
 
         print("Writing drum track to disk for good measure")
         sf.write("model_out_drums.wav", full_drum_audio, sr, subtype='PCM_24')
@@ -66,6 +72,7 @@ class Stage2Handler():
         # normalize float range to int16 space  
         write(byte_io, sr, (full_drum_audio * 32767).astype(np.int16))
         output_drum_wav = byte_io.read()
+
 
         return output_drum_wav
 
@@ -115,6 +122,7 @@ def main():
             if (command == network.STAGE1_DATA):
                 print("STAGE1 DATA")
                 drum_data = handler.handle_wav_data(buff, model)
+                print("type: ", type(drum_data))
 
                 # print("SENDING DATA: ", drum_data)
                 print("SENDING LEN: ", len(drum_data))

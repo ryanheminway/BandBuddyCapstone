@@ -136,9 +136,7 @@ def make_tap_sequence(tempo, onset_times, onset_frames, onset_velocities,
 
 
 # Given a .wav file path, applies the Drumify model to the input track and outputs a drum track.
-def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=False, start_windows_on_downbeat=False):
-    #y, sr = librosa.load(f)
-    
+def audio_to_drum(y, sr, tempo, velocity_threshold, temperature, model, force_sync=False, start_windows_on_downbeat=False):
     # pad the beginning to avoid errors with onsets right at the start
     y = np.concatenate([np.zeros(1000), y])
 
@@ -147,8 +145,9 @@ def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=Fals
     tap_sequences = []
     # Loop through the file, grabbing 2-bar sections at a time, estimating
     # tempos along the way to try to handle tempo variations
-
-    tempo, onset_times, onset_frames, onset_velocities = get_rhythm_elements(y, sr)
+    # "old_tempo" will never be used. "tempo" passed in as param will be used
+    # (TODO) remove old_tempo once tested
+    old_tempo, onset_times, onset_frames, onset_velocities = get_rhythm_elements(y, sr)
 
     initial_start_time = onset_times[0]
 
@@ -171,13 +170,16 @@ def audio_to_drum(y, sr, velocity_threshold, temperature, model, force_sync=Fals
     start_time += two_bar_length;
     end_time += two_bar_length
 
+    # (TODO) Could also enforce that the clip is 2 or 4 bars
+    # while bars < expected_bars:
     while start_time < clip_length:
         start_sample = int(librosa.core.time_to_samples(start_time, sr=sr))
         end_sample = int(librosa.core.time_to_samples(start_time + two_bar_length, sr=sr))
         current_section = y[start_sample:end_sample]
         # Approximate tempo
-        tempo = librosa.beat.tempo(onset_envelope=librosa.onset.onset_strength(current_section, sr=sr), max_tempo=180)[
-            0]
+        # Don't approximate tempo ever
+        #tempo = librosa.beat.tempo(onset_envelope=librosa.onset.onset_strength(current_section, sr=sr), max_tempo=180)[
+        #    0]
 
         beat_length = 60 / tempo
         two_bar_length = beat_length * 8
