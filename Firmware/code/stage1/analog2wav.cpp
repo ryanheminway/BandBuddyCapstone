@@ -327,7 +327,7 @@ static int init_playback_handle(uint32_t ring_buffer_size)
 }
 
 // Initalize the capture handle for audio capture. Returns 0 on success, errno on failure.
-int init_capture_handle()
+int init_capture_handle(uint32_t ring_buffer_size)
 {
     int err;
 
@@ -368,7 +368,7 @@ int init_capture_handle()
     }
 
     // Set the pcm ring buffer size
-    if ((err = snd_pcm_hw_params_set_buffer_size(capture_handle, hw_params, PCM_RING_BUFFER_SIZE)) < 0)
+    if ((err = snd_pcm_hw_params_set_buffer_size(capture_handle, hw_params, ring_buffer_size)) < 0)
     {
         print_error(err, "Cannot set capture handle ring buffer size!");
         return err;
@@ -391,6 +391,14 @@ int init_capture_handle()
     if ((err = snd_pcm_hw_params_set_channels(capture_handle, hw_params, 2)) < 0)
     {
         print_error(err, "Could not request stereo audio!");
+        return err;
+    }
+
+     // Set the period size
+    snd_pcm_uframes_t num_frames = ((ring_buffer_size / BYTES_PER_FRAME) / 2);
+    if ((err = snd_pcm_hw_params_set_period_size_near(capture_handle, hw_params, &num_frames, 0)) < 0)
+    {
+        print_error(err, "Could not set the period size!\n");
         return err;
     }
 
@@ -509,7 +517,7 @@ int record_until_button_press(int num_bytes_to_record)
         num_bytes_read += BYTES_PER_PERIOD;
 	
 	// (NOTE Ryan Heminway) listening for 1 periods instead
-        if (num_bytes_read == BYTES_PER_PERIOD * 4)
+        if (num_bytes_read == BYTES_PER_PERIOD * 3)
         {
             // Spawn the consumer thread for async playback 
             std::thread playback_thread(async_playback_until_button_press);
@@ -1099,7 +1107,7 @@ int main(int, char *[])
         await_button_press();
 
         // Init the capture handle
-        err = init_capture_handle();
+        err = init_capture_handle(BYTES_PER_PERIOD);
         if (err)
         {
             return err;
@@ -1122,7 +1130,7 @@ int main(int, char *[])
         }
 
         //Re-open the playback device and record
-        if ((err = init_playback_handle(BYTES_PER_PERIOD / 2)))
+        if ((err = init_playback_handle(BYTES_PER_PERIOD / 4)))
         {
             return err;
         }

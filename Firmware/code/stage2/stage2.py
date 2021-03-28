@@ -23,7 +23,7 @@ class Stage2Handler():
     def __init__(self):
         self.tempo = 100  # (TODO) Control via webserver
         self.genre = 0  # (TODO) Control via webserver, also tie to models
-        self.soundpack = 2  # (TODO) Control via Webserver, also tie to soundpacks
+        self.soundpack = 3  # (TODO) Control via Webserver, also tie to soundpacks
         self.temperature = 0.8  # (TODO) Need to experiment with these parameters. Also need to make them configurable via a network msg
         self.velocity_threshold = 0.08
         self.drum_track = None
