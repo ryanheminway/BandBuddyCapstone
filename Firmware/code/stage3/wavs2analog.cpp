@@ -285,12 +285,12 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
     return 0;
 }
 
-static int init_playback_handle()
+static int init_playback_handle(uint32_t ring_buffer_size)
 {
     int err;
 
     // Open the pisound audio device
-    if ((err = snd_pcm_open(&playback_handle, alsa_capture_device_name, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK)) < 0)
+    if ((err = snd_pcm_open(&playback_handle, alsa_capture_device_name, SND_PCM_STREAM_PLAYBACK,  SND_PCM_NONBLOCK)) < 0)
     {
         print_error(err, "Cannot open audio device \"%s\"!", alsa_capture_device_name);
         return err;
@@ -346,25 +346,25 @@ static int init_playback_handle()
     }
 
     // Set the period size
-    snd_pcm_uframes_t num_frames = FRAMES_PER_PERIOD;
+    snd_pcm_uframes_t num_frames = ((ring_buffer_size / BYTES_PER_FRAME) / 2);
     if ((err = snd_pcm_hw_params_set_period_size_near(playback_handle, hw_params, &num_frames, 0)) < 0)
     {
         print_error(err, "Could not set the period size!\n");
         return err;
     }
-    if (num_frames != FRAMES_PER_PERIOD)
+    if (num_frames != ((ring_buffer_size / BYTES_PER_FRAME) / 2))
     {
         fprintf(stderr, "Could not set frames/period: target %d, returned %lu!\n", FRAMES_PER_PERIOD, num_frames);
         return 1;
     }
 
     // Set the pcm ring buffer size
-    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, BYTES_PER_PERIOD)) < 0)
+    // (NOTE Ryan Heminway) dividing by 8 instead of 2 
+    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, ring_buffer_size)) < 0)
     {
-        print_error(err, "Cannot set pcm ring buffer size!");
+        print_error(err, "Cannot set playback handle ring buffer size!");
         return err;
     }
-
 
     // Deliver the hardware params to the handle
     if ((err = snd_pcm_hw_params(playback_handle, hw_params)) < 0)
@@ -398,6 +398,14 @@ static int init_playback_handle()
         return err;
     }
 
+    // Set the minimum available frames for a wakeup to the ring buffer size
+    if ((err = snd_pcm_sw_params_set_avail_min(playback_handle, sw_params, ring_buffer_size / 2)) < 0)
+    {
+        print_error(err, "Could not set the frame wakeup limit!");
+        return err;
+    }
+
+
     // Free the sw params
     snd_pcm_sw_params_free(sw_params);
 
@@ -409,7 +417,7 @@ static int init_playback_handle()
 }
 
 // Initalize the capture handle for audio capture. Returns 0 on success, errno on failure.
-int init_capture_handle()
+int init_capture_handle(uint32_t ring_buffer_size)
 {
     int err;
 
@@ -450,9 +458,9 @@ int init_capture_handle()
     }
 
     // Set the pcm ring buffer size
-    if ((err = snd_pcm_hw_params_set_buffer_size(capture_handle, hw_params, PCM_RING_BUFFER_SIZE)) < 0)
+    if ((err = snd_pcm_hw_params_set_buffer_size(capture_handle, hw_params, ring_buffer_size)) < 0)
     {
-        print_error(err, "Cannot set pcm ring buffer size!");
+        print_error(err, "Cannot set capture handle ring buffer size!");
         return err;
     }
 
@@ -473,6 +481,14 @@ int init_capture_handle()
     if ((err = snd_pcm_hw_params_set_channels(capture_handle, hw_params, 2)) < 0)
     {
         print_error(err, "Could not request stereo audio!");
+        return err;
+    }
+
+     // Set the period size
+    snd_pcm_uframes_t num_frames = ((ring_buffer_size / BYTES_PER_FRAME) / 2);
+    if ((err = snd_pcm_hw_params_set_period_size_near(capture_handle, hw_params, &num_frames, 0)) < 0)
+    {
+        print_error(err, "Could not set the period size!\n");
         return err;
     }
 
@@ -588,7 +604,7 @@ static int play_loop(int loop_size_bytes)
         }
 
         // Cap the frames to write
-        frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
+        //frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
 
         for (int i = sample_index; i < sample_index + (frames_to_deliver * BYTES_PER_FRAME); i += 2)
         {
@@ -677,7 +693,7 @@ static void async_record_until_button_press(int loop_size_bytes)
 
         num_bytes_read += BYTES_PER_PERIOD; 
 
-        if (!spawned_thread && num_bytes_read == BYTES_PER_PERIOD * 8)
+        if (!spawned_thread && num_bytes_read == BYTES_PER_PERIOD * 3)
         {
             producer_thread = std::thread([&]() { 
                     fprintf(stdout, "Starting to play: recorded %d bytes\n", num_bytes_read); 
@@ -705,12 +721,12 @@ static int loop_audio_until_cancelled(int loop_size)
     int err;
 
     // Initialize the playback handle
-    if ((err = init_playback_handle()))
+    if ((err = init_playback_handle(BYTES_PER_PERIOD / 4)))
     {
         return 1;
     }
 
-    if ((err = init_capture_handle()))
+    if ((err = init_capture_handle(BYTES_PER_PERIOD)))
     {
         return 1;
     } 
