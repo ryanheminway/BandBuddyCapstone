@@ -4,13 +4,13 @@ import os
 SOUNDPACK_DIR = os.path.abspath("../../../Data/sf2_soundpacks/")
 MODEL_DIR = os.path.abspath("../../../ML/model_checkpoints/")
 
-GENRE_TO_ID = {
-        "generic" : 0,
-        "rock" : 1,
-        "jazz" : 2,
-        "pop" : 3,
-        "hiphop" : 4,
-        }
+GENRE_TO_ID = (
+        (0, "Generic"),
+        (1, "Rock"),
+        (2, "Jazz"),
+        (3, "Pop"),
+        (4, "Hiphop"),
+)
 
 ID_TO_MODEL = {
         0 : "groovae_all/allgenre.tar",
@@ -20,18 +20,18 @@ ID_TO_MODEL = {
         4 : "groovae_hiphop/hiphop.tar",
         }
 
-TIMRE_TO_ID = {
-        "Default" : 0,
-        "Secondary default" : 1,
-        "808 pack" : 2,
-        "Jazz" : 3,
-        "Woodblocks" : 4,
-        "Electronic sounds" : 5,
-        "Synth Drums" : 6,
-        "Hard Rock" : 7,
-        "Brushes" : 8,
-        "Warm Pad" : 9,
-        }
+TIMBRE_TO_ID = (
+        (0, "Default"),
+        (1, "Secondary Default"),
+        (2, "808 Pack"),
+        (3, "Jazz"),
+        (4, "Woodblocks"),
+        (5, "Electronic Sounds"),
+        (6, "Synth Drums"),
+        (7, "Hard Rock"),
+        (8, "Brushes"),
+        (9, "Warm Pad"),
+)
 
 ID_TO_SOUNDPACK = {
         0 : "GoodStandard.sf2",
@@ -44,4 +44,9 @@ ID_TO_SOUNDPACK = {
         7 : "HardRockDrums.sf2",
         8 : "Brushy.sf2",
         9 : "WarmPad.sf2",
-        }
+}
+
+BARS_TO_VALUE = (
+        (2, "2 Bars"),
+        (4, "4 Bars"),
+)
