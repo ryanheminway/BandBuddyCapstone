@@ -18,7 +18,7 @@ public:
     };
 
     // A callback typedef - used to register a button press callback for a State
-    using ButtonPressCallback = void(*)(State);
+    using ButtonPressCallback = bool(*)(State);
 
 private: 
 
@@ -51,7 +51,7 @@ public:
     void register_callback(State stage, ButtonPressCallback callback);
 
     // Notify the state machine that the button was pressed.
-    void button_pressed();
+    bool button_pressed();
 
     // Notify the state machine that the backbone has completed stage 2
     void stage2_complete();

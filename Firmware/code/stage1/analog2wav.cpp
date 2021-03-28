@@ -553,9 +553,9 @@ void async_playback_until_button_press()
             overtook = false;
         }
 
-        if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
+        if ((err = snd_pcm_wait(playback_handle, -1)) < 0)
         {
-            print_error(err, "Poll failed!\n");
+            print_error(err, "Poll failed! normal_playback\n");
             return;
         }
         
@@ -627,12 +627,17 @@ static inline int calculate_met_measure_buffer_size(int samples_per_measure)
     return (samples_per_measure *  NUM_CHANNELS * BYTES_PER_SAMPLE) + met_delay_at_start;
 }
 
-static void fill_metronome_buffer(uint8_t *metronome_buffer, int buffer_size){
+static void fill_metronome_buffer(uint8_t *metronome_buffer, int buffer_size)
+{
+    memset(metronome_buffer, 0, buffer_size * sizeof(uint8_t));
 
     int l0 = met_delay_at_start, 
         l1 = met_delay_at_start + ((buffer_size - met_delay_at_start) / 4), 
         l2 = met_delay_at_start + ((buffer_size - met_delay_at_start) / 2), 
         l3 = met_delay_at_start + ((buffer_size - met_delay_at_start) * 3 / 4);
+
+    fprintf(stdout, "Clicks @ %d, %d, %d, %d (%d delay, %d bpm)", 
+            l0, l1, l2, l3, met_delay_at_start, bpm.load(std::memory_order_relaxed));
 
     memcpy(metronome_buffer + l0, click_high, click_high_size);
     memcpy(metronome_buffer + l1, click_low, click_low_size);
@@ -684,7 +689,7 @@ static void play_countin(uint8_t* metronome_buffer, int buffer_size)
     {
         if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
         {
-            print_error(err, "Poll failed!\n");
+            print_error(err, "Poll failed! plat_counting\n");
             return;
         }
         
@@ -705,7 +710,7 @@ static void play_countin(uint8_t* metronome_buffer, int buffer_size)
         }
 
         // Cap the frames to write
-        frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
+        //frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD / 2) ? FRAMES_PER_PERIOD / 2 : frames_to_deliver;
 
         int frames_written;
         if ((frames_written = snd_pcm_writei(playback_handle, 
@@ -724,6 +729,8 @@ static void play_countin(uint8_t* metronome_buffer, int buffer_size)
                 return;
             }
         }
+
+        fprintf(stdout, "frames written =%d\n", frames_written);
 
         num_bytes_written += frames_written * BYTES_PER_FRAME;
     }

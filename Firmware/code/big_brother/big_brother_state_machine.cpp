@@ -30,12 +30,13 @@ void BigBrotherStateMachine::stage2_complete()
     is_stage2_done = true;
 }
 
-void BigBrotherStateMachine::button_pressed()
+bool BigBrotherStateMachine::button_pressed()
 {
+    bool awaitButtonForNextState;
     // If a callback has been registered for the current state, call it 
     if (state_callback_map.find(current_state) != state_callback_map.end())
     {
-        state_callback_map[current_state](current_state);
+        awaitButtonForNextState = state_callback_map[current_state](current_state);
     }
 
     // Unless we're in State 2, we transition immediately to the next state 
@@ -52,4 +53,6 @@ void BigBrotherStateMachine::button_pressed()
     {
         current_state = state_transition_map[current_state];
     }
+
+    return awaitButtonForNextState;
 }
