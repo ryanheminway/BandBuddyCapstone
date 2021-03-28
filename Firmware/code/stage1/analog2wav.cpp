@@ -200,7 +200,7 @@ static int init_playback_handle(uint32_t ring_buffer_size)
     int err;
 
     // Open the pisound audio device
-    if ((err = snd_pcm_open(&playback_handle, alsa_capture_device_name, SND_PCM_STREAM_PLAYBACK,  SND_PCM_ASYNC)) < 0)
+    if ((err = snd_pcm_open(&playback_handle, alsa_capture_device_name, SND_PCM_STREAM_PLAYBACK,  SND_PCM_NONBLOCK)) < 0)
     {
         print_error(err, "Cannot open audio device \"%s\"!", alsa_capture_device_name);
         return err;
@@ -256,13 +256,13 @@ static int init_playback_handle(uint32_t ring_buffer_size)
     }
 
     // Set the period size
-    snd_pcm_uframes_t num_frames = FRAMES_PER_PERIOD;
+    snd_pcm_uframes_t num_frames = ((ring_buffer_size / BYTES_PER_FRAME) / 2);
     if ((err = snd_pcm_hw_params_set_period_size_near(playback_handle, hw_params, &num_frames, 0)) < 0)
     {
         print_error(err, "Could not set the period size!\n");
         return err;
     }
-    if (num_frames != FRAMES_PER_PERIOD)
+    if (num_frames != ((ring_buffer_size / BYTES_PER_FRAME) / 2))
     {
         fprintf(stderr, "Could not set frames/period: target %d, returned %lu!\n", FRAMES_PER_PERIOD, num_frames);
         return 1;
@@ -307,6 +307,14 @@ static int init_playback_handle(uint32_t ring_buffer_size)
         print_error(err, "Could not deliver the software parameters to the capture device!");
         return err;
     }
+
+    // Set the minimum available frames for a wakeup to the ring buffer size
+    if ((err = snd_pcm_sw_params_set_avail_min(playback_handle, sw_params, ring_buffer_size / 2)) < 0)
+    {
+        print_error(err, "Could not set the frame wakeup limit!");
+        return err;
+    }
+
 
     // Free the sw params
     snd_pcm_sw_params_free(sw_params);
@@ -501,7 +509,7 @@ int record_until_button_press(int num_bytes_to_record)
         num_bytes_read += BYTES_PER_PERIOD;
 	
 	// (NOTE Ryan Heminway) listening for 1 periods instead
-        if (num_bytes_read == BYTES_PER_PERIOD * 8)
+        if (num_bytes_read == BYTES_PER_PERIOD * 4)
         {
             // Spawn the consumer thread for async playback 
             std::thread playback_thread(async_playback_until_button_press);
@@ -555,6 +563,7 @@ void async_playback_until_button_press()
 
         if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
         {
+            fprintf(stdout, "num bytes written = %d\n", num_bytes_written);
             print_error(err, "Poll failed! normal_playback\n");
             snd_pcm_close(playback_handle);
             return;
@@ -577,7 +586,7 @@ void async_playback_until_button_press()
         }
 
         // Cap the frames to write
-        frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
+        //frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD / 2) ? FRAMES_PER_PERIOD / 2 : frames_to_deliver;
 
         // Copy the data to write into the sync buffer and add the metronome data at the current write pointer mod one measure length
         memcpy(sync_buffer, buffer + num_bytes_written, frames_to_deliver * BYTES_PER_FRAME);
@@ -713,7 +722,7 @@ static void play_countin(uint8_t* metronome_buffer, int buffer_size)
         }
 
         // Cap the frames to write
-        frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD ) ? FRAMES_PER_PERIOD : frames_to_deliver;
+        //frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD ) ? FRAMES_PER_PERIOD : frames_to_deliver;
 
         int frames_written;
         if ((frames_written = snd_pcm_writei(playback_handle, 
@@ -1113,7 +1122,7 @@ int main(int, char *[])
         }
 
         //Re-open the playback device and record
-        if ((err = init_playback_handle(BYTES_PER_PERIOD)))
+        if ((err = init_playback_handle(BYTES_PER_PERIOD / 2)))
         {
             return err;
         }
