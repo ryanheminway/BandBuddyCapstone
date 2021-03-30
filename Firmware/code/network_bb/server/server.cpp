@@ -211,12 +211,6 @@ int main(int argc, char *argv[])
                             // TODO: stage3_data_ready function
                             std::cout << "Processing stage 2 data ready" << std::endl;
                             break;
-
-                        case WEBSERVER_REQUEST:
-                            // TODO: webserver_request function
-                            std::cout << "Processing webserver_request ready" << std::endl;
-                            recieve_and_send_webserver_fbb(sd, payload_size, client_socket[destination]);
-                            break;
                         }
                     } else {
 

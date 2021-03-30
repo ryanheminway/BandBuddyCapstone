@@ -61,7 +61,7 @@ int await_stage_ack()
 }
 
 // State INIT callback.
-void callback_init(BigBrotherStateMachine::State)
+bool callback_init(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: INIT" << '\n';
 
@@ -71,10 +71,11 @@ void callback_init(BigBrotherStateMachine::State)
 
     // Wait for Stage 1 ACK
     await_stage_ack();
+    return true;
 }
 
 // State STAGE_1 callback.
-void callback_stage_1(BigBrotherStateMachine::State)
+bool callback_stage_1(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: STAGE_1" << '\n';
 
@@ -92,18 +93,20 @@ void callback_stage_1(BigBrotherStateMachine::State)
     // Asynchronously wait for Stage 2 to complete 
     auto stage2_thread = std::thread(await_stage2_done);
     stage2_thread.detach(); 
+    return false;
 }
 
 // State STAGE_2 callback.
-void callback_stage_2(BigBrotherStateMachine::State)
+bool callback_stage_2(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: STAGE_2" << '\n';
 
-    // Ignore button presses for Stage 2
+    // Ignore button presses for Stage 3 start
+    return false;
 }
 
 // State STAGE_3 callback.
-void callback_stage_3(BigBrotherStateMachine::State)
+bool callback_stage_3(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: STAGE_3" << '\n';
 
@@ -124,6 +127,7 @@ void callback_stage_3(BigBrotherStateMachine::State)
 
     // Wait for Stage 1 ACK
     await_stage_ack();
+    return true;
 }
 
 
@@ -157,9 +161,10 @@ int main(int, char*[])
         button_press_cv.wait(lock, [&](){ return is_button_pressed.load(std::memory_order_seq_cst); });
 
         // Ask the state machine what to do 
-        state_machine.button_pressed();
+        bool awaitButtonPressNextState = state_machine.button_pressed();
 
         // Reset the spurious wakeup guard
+        std::cout << "awaitButtonPressNextState: " << awaitButtonPressNextState << '\n';
         is_button_pressed.store(false, std::memory_order_seq_cst);
     }
 

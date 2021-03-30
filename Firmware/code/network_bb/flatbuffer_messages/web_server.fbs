@@ -5,6 +5,7 @@ table WebServer{
     timbre: uint32 = 0;
     tempo: uint32 = 0;
     temperature: double = 0;
+    bars: uint32 = 0;
 }
 
 root_type WebServer;
