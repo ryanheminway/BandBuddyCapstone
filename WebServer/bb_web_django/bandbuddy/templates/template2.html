@@ -7,5 +7,20 @@
     {% csrf_token %}
     {{ form|crispy }}
     <button type="submit" class="btn btn-success">Save Settings</button>
+    <br>
+    <br>
+    <button type="button">
+      <a href="{% url 'download_combined' %}">Download Combined WAV File</a>
+    </button>
+    <br>
+    <br>
+    <button type="button">
+      <a href="{% url 'download_drums' %}">Download Drums WAV File</a>
+    </button>
+    <br>
+    <br>
+    <button type="button">
+      <a href="{% url 'download_input' %}">Download Input File</a>
+    </button>
   </form>
 {% endblock %}

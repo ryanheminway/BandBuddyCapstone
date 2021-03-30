@@ -8,7 +8,7 @@
 
 import sys
 from django import forms
-sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/stage2')
+sys.path.insert(0, '/home/brick/bandbuddy/BandBuddyCapstone/Firmware/code/stage2')
 import band_buddy_msg, bb_types
 
 BAR_CHOICES = (
