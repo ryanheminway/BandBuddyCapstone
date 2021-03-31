@@ -85,15 +85,15 @@ bool callback_stage_1(BigBrotherStateMachine::State)
     // Stop Stage 1 recording
     int stage = BIG_BROTHER;
     int destination = BACKBONE_SERVER;
-    stage1_stop(networkbb_fd, stage);
+    //stage1_stop(networkbb_fd, stage);
 
-    // Await the ACK 
+    // Await the ACK when stage1 is done
     await_stage_ack();
 
     // Asynchronously wait for Stage 2 to complete 
-    auto stage2_thread = std::thread(await_stage2_done);
-    stage2_thread.detach(); 
-    return false;
+    //auto stage2_thread = std::thread(await_stage2_done);
+    //stage2_thread.detach(); 
+    return true;
 }
 
 // State STAGE_2 callback.
@@ -101,8 +101,10 @@ bool callback_stage_2(BigBrotherStateMachine::State)
 {
     std::cout << "Callback: STAGE_2" << '\n';
 
+    //wait for ACK from network backbone once stage2 is done
+    await_stage_ack();
     // Ignore button presses for Stage 3 start
-    return false;
+    return true;
 }
 
 // State STAGE_3 callback.
@@ -122,7 +124,7 @@ bool callback_stage_3(BigBrotherStateMachine::State)
     destroy_midi_mem_blk();
 
     // Start Stage 1 recording
-    stage = BIG_BROTHER;
+    //stage = BIG_BROTHER;
     stage1_start(networkbb_fd, stage);
 
     // Wait for Stage 1 ACK

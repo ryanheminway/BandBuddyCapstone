@@ -1,6 +1,7 @@
 #include "big_brother_state_machine.h" 
 
 #include <stdexcept>
+#include <iostream>
 
 
 std::unordered_map<BigBrotherStateMachine::State, BigBrotherStateMachine::State> BigBrotherStateMachine::state_transition_map = 
@@ -33,26 +34,37 @@ void BigBrotherStateMachine::stage2_complete()
 bool BigBrotherStateMachine::button_pressed()
 {
     bool awaitButtonForNextState;
-    // If a callback has been registered for the current state, call it 
-    if (state_callback_map.find(current_state) != state_callback_map.end())
-    {
-        awaitButtonForNextState = state_callback_map[current_state](current_state);
-    }
 
-    // Unless we're in State 2, we transition immediately to the next state 
-    if (current_state == State::STAGE_2)
-    {
-        if (is_stage2_done)
-        {
-            // Only transition if Stage 2 is done! 
+
+   if (current_state == State::INIT) 
+   {
+       while(current_state != State::STAGE_3)
+       {
+            // If a callback has been registered for the current state, call it 
+            if (state_callback_map.find(current_state) != state_callback_map.end())
+            {
+            awaitButtonForNextState = state_callback_map[current_state](current_state);
+            }
             current_state = state_transition_map[current_state];
-            is_stage2_done = false;
-        }
-    } 
-    else 
-    {
-        current_state = state_transition_map[current_state];
-    }
+       }
+       return awaitButtonForNextState;
+   } 
+   else if (current_state == State::STAGE_3)
+   {
+     do
+       {
+            // If a callback has been registered for the current state, call it 
+            if (state_callback_map.find(current_state) != state_callback_map.end())
+            {
+            awaitButtonForNextState = state_callback_map[current_state](current_state);
+            }
+            current_state = state_transition_map[current_state];
+       } while (current_state != State::STAGE_3);
+       
+       
+       return awaitButtonForNextState;
+   }
+       
 
     return awaitButtonForNextState;
 }

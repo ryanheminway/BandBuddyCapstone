@@ -183,8 +183,13 @@ int main(int argc, char *argv[])
                         switch (cmd)
                         {
                         case STAGE1_DATA_READY:
+                        {
                             std::cout << "Processing stage 1 data ready" << std::endl;
                             uint32_t wav_data_sz;
+                            int ack_dest = BIG_BROTHER;
+                            int ack_src = BACKBONE_SERVER;
+                            int dest_sock = BIG_BROTHER;
+                            send_ack(client_socket[dest_sock], ack_dest, ack_src);
 
                             if (recieve_stage1_fbb(sd, payload_size, wav_data_sz) != FAILED)
                             {
@@ -196,15 +201,19 @@ int main(int argc, char *argv[])
                             }
 
                             break;
-                        case STAGE2_DATA_READY: {
+                        }
+                        case STAGE2_DATA_READY: 
+                        {
                             std::cout << "Processing stage 2 data ready" << std::endl;
-                            recieve_and_mem_shared_stage2_data(sd, payload_size);
-                            stage2_data_ready(client_socket[STAGE3], payload_size);
 
                             int ack_dest = BIG_BROTHER;
                             int ack_src = BACKBONE_SERVER;
                             int index = BIG_BROTHER;
                             send_ack(client_socket[index], ack_dest, ack_src);
+
+                            recieve_and_mem_shared_stage2_data(sd, payload_size);
+                            stage2_data_ready(client_socket[STAGE3], payload_size);
+
                             break;
                         }
                         case STAGE3_DATA_READY:

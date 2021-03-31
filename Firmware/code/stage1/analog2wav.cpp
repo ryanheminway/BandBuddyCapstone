@@ -630,6 +630,7 @@ void async_playback_until_button_press()
     } else 
     {
         fprintf(stdout, "%s\n", "playback handle closed");
+        return;
     }
 }
 
