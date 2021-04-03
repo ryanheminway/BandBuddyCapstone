@@ -1,4 +1,8 @@
 import sys
+sys.path.insert(0, '/home/brick/bandbuddy/BandBuddyCapstone/Firmware/code/stage2')
+import band_buddy_msg, bb_types
+import mimetypes
+from django.http import HttpResponse
 from django.shortcuts import render
 from django.views.generic import TemplateView, CreateView
 
@@ -8,13 +12,27 @@ class HomePageView(TemplateView):
 
 from .forms import GenreForm
 
-#coordinate with ryan
-genre_dict= {'rock': 0, "jazz": 1, "funk": 2, "pop": 3, "classical": 4}
-timbre_dict= {'timbre1':0, 'timbre2':1, 'timbre3':2, 'timbre4':3, 'timbre5':4}
-rev_genre_dict={0:'rock', 1:'jazz', 2:'funk', 3:'pop', 4:'classical'}
-rev_timbre_dict={0:'timbre1',1:'timbre2',2:'timbre3',3:'timbre4',4:'timbre5'}
+def download_file(request, fl_path, filename):
+    fl = open(fl_path, 'r')
+    mime_type, _ = mimetypes.guess_type(fl_path)
+    response = HttpResponse(fl, content_type=mime_type)
+    response['Content-Disposition'] = "attachment; filename=%s" % filename
+    return response
 
+def download_combined(request):
+    fl_path = '/home/brick/bandbuddy/BandBuddyCapstone/WebServer/bb_web_django/bandbuddy/files/test.txt'
+    filename = 'test.txt'
+    return download_file(request, fl_path, filename)
 
+def download_drums(request):
+    fl_path = '/home/brick/bandbuddy/BandBuddyCapstone/WebServer/bb_web_django/bandbuddy/files/drums.txt'
+    filename = 'drums.txt'
+    return download_file(request, fl_path, filename)
+
+def download_input(request):
+    fl_path = '/home/brick/bandbuddy/BandBuddyCapstone/WebServer/bb_web_django/bandbuddy/files/input.txt'
+    filename = 'input.txt'
+    return download_file(request, fl_path, filename)
 
 def update_genre (request):
     #have it send to stage 2 here
@@ -32,16 +50,16 @@ def update_genre (request):
 
     host = '127.0.0.1'
     port = 8080
-    socket_fd = band_buddy_msg.connect_and_register(host, port, band_buddy_msg.WEB_SERVER_STAGE)  
+    #socket_fd = band_buddy_msg.connect_and_register(host, port, band_buddy_msg.WEB_SERVER_STAGE)  
 
-    if genre == '0':
-        band_buddy_msg.request_params(socket_fd,band_buddy_msg.WEB_SERVER_STAGE,band_buddy_msg.STAGE2)
-        cmd, message2 = band_buddy_msg.recv_msg(socket_fd)
-        band_buddy_msg.request_params(socket_fd,band_buddy_msg.WEB_SERVER_STAGE,band_buddy_msg.STAGE3)
-        cmd, message3 = band_buddy_msg.recv_msg(socket_fd)
-        socket_fd.close()
+    #if genre == '0':
+        #band_buddy_msg.request_params(socket_fd,band_buddy_msg.WEB_SERVER_STAGE,band_buddy_msg.STAGE2)
+        #cmd, message2 = band_buddy_msg.recv_msg(socket_fd)
+        #band_buddy_msg.request_params(socket_fd,band_buddy_msg.WEB_SERVER_STAGE,band_buddy_msg.STAGE3)
+        #cmd, message3 = band_buddy_msg.recv_msg(socket_fd)
+        #socket_fd.close()
         
-        form = GenreForm(request.POST or None, genre=int(message2.Genre()),timbre=int(message2.Timbre()),tempo=message2.Tempo(),temperature=message2.Temperature(),drums=bool(message3.Drums()),guitar=bool(message3.Guitar()), bars=int(message2.Bars())) 
+        #form = GenreForm(request.POST or None, genre=int(message2.Genre()),timbre=int(message2.Timbre()),tempo=message2.Tempo(),temperature=message2.Temperature(),drums=bool(message3.Drums()),guitar=bool(message3.Guitar()), bars=int(message2.Bars())) 
 
     if genre != '0':
           
@@ -52,11 +70,11 @@ def update_genre (request):
         print(drums)
         print(guitar)
         
-        band_buddy_msg.send_webserver_data(socket_fd, int(genre), int(timbre), int(tempo), float(temperature), drums, guitar, int(bars), band_buddy_msg.STAGE1, band_buddy_msg.WEB_SERVER_STAGE)
-        band_buddy_msg.send_webserver_data(socket_fd, int(genre), int(timbre), int(tempo), float(temperature), drums, guitar, int(bars), band_buddy_msg.STAGE2, band_buddy_msg.WEB_SERVER_STAGE)
-        band_buddy_msg.send_webserver_data(socket_fd, int(genre), int(timbre), int(tempo), float(temperature), drums, guitar, int(bars), band_buddy_msg.STAGE3, band_buddy_msg.WEB_SERVER_STAGE)
-    
-        form = GenreForm(request.POST or None, genre=genre,timbre=timbre,tempo=tempo,temperature=temperature,drums=drums,guitar=guitar,bars=bars) 
+        #band_buddy_msg.send_webserver_data(socket_fd, int(genre), int(timbre), int(tempo), float(temperature), drums, guitar, int(bars), band_buddy_msg.STAGE1, band_buddy_msg.WEB_SERVER_STAGE)
+        #band_buddy_msg.send_webserver_data(socket_fd, int(genre), int(timbre), int(tempo), float(temperature), drums, guitar, int(bars), band_buddy_msg.STAGE2, band_buddy_msg.WEB_SERVER_STAGE)
+        #band_buddy_msg.send_webserver_data(socket_fd, int(genre), int(timbre), int(tempo), float(temperature), drums, guitar, int(bars), band_buddy_msg.STAGE3, band_buddy_msg.WEB_SERVER_STAGE)
+    #put this back in if statement when done
+    form = GenreForm(request.POST or None, genre=genre,timbre=timbre,tempo=tempo,temperature=temperature,drums=drums,guitar=guitar,bars=bars) 
     
     context = { 
         "form":form
