@@ -537,6 +537,183 @@ int init_capture_handle(uint32_t ring_buffer_size)
     return 0;
 }
 
+// The path of the input wav on disk
+static const char* wav_input_path = "/home/patch/input.wav";
+static const char* wav_drums_path = "/home/patch/drums.wav";
+static const char* wav_sync_path = "/home/patch/sync.wav";
+
+// Big-Endian
+void uint32_to_uint8_array_BE(uint8_t *array, uint32_t value)
+{
+    array[0] = (value >> 0) & 0xFF;
+    array[1] = (value >> 8) & 0xFF;
+    array[2] = (value >> 16) & 0xFF;
+    array[3] = (value >> 24) & 0xFF;
+}
+
+void uint16_to_uint8_array_BE(uint8_t *array, uint16_t value)
+{
+    array[0] = (value >> 0) & 0xFF;
+    array[1] = (value >> 8) & 0xFF;
+}
+
+void calculate_header_values(uint16_t *num_channels, uint32_t *sample_rate, uint32_t *byte_rate,
+                             uint16_t *block_align, uint16_t *bits_per_sample)
+{
+    // Some of these are #defined for now
+    *num_channels = NUM_CHANNELS;
+    *sample_rate = SAMPLE_RATE;
+    *bits_per_sample = BYTES_PER_SAMPLE * 8;
+
+    // Block align = # channels * bytes/sample
+    *block_align = NUM_CHANNELS * BYTES_PER_SAMPLE;
+
+    // Byte rate = Sample rate * # channels * bytes/sample
+    *byte_rate = SAMPLE_RATE * NUM_CHANNELS * BYTES_PER_SAMPLE;
+}
+
+int write_wav_header(FILE* file, int file_size)
+{
+    uint32_t chunk_size, sample_rate, byte_rate, subchunk_size;
+    uint16_t num_channels, block_align, bits_per_sample;
+    
+    calculate_header_values(&num_channels, &sample_rate, &byte_rate, &block_align, &bits_per_sample);
+    chunk_size = file_size + 36;
+    subchunk_size = file_size;
+
+    uint8_t data[4];
+    uint8_t mem[44];
+
+    // RIFF bytes
+    memcpy(mem, "RIFF", 4);
+    //memcpy(data, "RIFF", 4);
+    //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Chunk size, big-endian
+    uint32_to_uint8_array_BE(data, chunk_size);
+    memcpy(mem + 4, data, 4);
+    //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // WAVE bytes
+    memcpy(mem + 8, "WAVE", 4);
+    //memcpy(data, "WAVE", 4);
+    //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // fmt  bytes
+    memcpy(mem + 12, "fmt ", 4);
+    //memcpy(data, "fmt ", 4);
+    //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Subchunk1 size is always 16 for WAV
+    data[0] = 16;
+    data[1] = 0x00;
+    data[2] = 0x00;
+    data[3] = 0x00;
+    memcpy(mem + 16, data, 4);
+    //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Audio format is always 1 for PCM
+    data[0] = 0x01;
+    data[1] = 0x00;
+    data[2] = 0x00;
+    data[3] = 0x00;
+    memcpy(mem + 20, data, 4);
+    //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // Channel count, big-endian
+    uint16_to_uint8_array_BE(data, num_channels);
+    memcpy(mem + 22, data, 2);
+    //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // Sample rate, big-endian
+    uint32_to_uint8_array_BE(data, sample_rate);
+    memcpy(mem + 24, data, 4);
+    //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Byte rate, big-endian
+    uint32_to_uint8_array_BE(data, byte_rate);
+    memcpy(mem + 28, data, 4);
+    //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Block align, big-endian
+    uint16_to_uint8_array_BE(data, block_align);
+    memcpy(mem + 32, data, 4);
+    //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // Bits per sample, big-endian
+    uint16_to_uint8_array_BE(data, bits_per_sample);
+    memcpy(mem + 34, data, 2);
+    //fwrite(data, sizeof(uint8_t), 2, file);
+
+    // data bytes
+    memcpy(mem + 36, "data", 4);
+    //memcpy(data, "data", 4);
+    //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Subchunk 2 size, big-endian
+    uint32_to_uint8_array_BE(data, subchunk_size);
+    memcpy(mem + 40, data, 4);
+    //fwrite(data, sizeof(uint8_t), 4, file);
+
+    // Write the header to file 
+    return (fwrite(mem, sizeof(uint8_t), 44, file) != 44);
+}
+
+int write_wav_to_disk(FILE* file, uint8_t* buffer, int file_size)
+{
+    return write_wav_header(file, file_size) || 
+    (fwrite(buffer, sizeof(uint8_t), file_size, file) != file_size);
+}
+
+int write_wavs_to_disk(int file_size)
+{
+    // Open the file, write the header, write the contents
+    FILE *file = fopen(wav_input_path, "w");
+    if (!file)
+    {
+        fprintf(stderr, "Failed to open file %s!\n", wav_input_path);
+        return 1;
+    }
+
+    if (write_wav_to_disk(file, output_buffer_recorded, file_size))
+    {
+        fprintf(stderr, "Failed to write to file %s!\n", wav_input_path);
+        return 1;
+    }
+
+    fclose(file);
+
+    file = fopen(wav_drums_path, "w");
+    if (!file)
+    {
+        fprintf(stderr, "Failed to open file %s!\n", wav_input_path);
+        return 1;
+    }
+
+    if (write_wav_to_disk(file, output_buffer_drum, file_size))
+    {
+        fprintf(stderr, "Failed to write file %s!\n", wav_drums_path);
+        return 1;
+    }
+    fclose(file);
+
+    file = fopen(wav_sync_path, "w");
+    if (!file)
+    {
+        fprintf(stderr, "Failed to open file %s!\n", wav_sync_path);
+        return 1;
+    }
+
+    if (write_wav_to_disk(file, output_buffer_combined, file_size))
+    {
+        fprintf(stderr, "Failed to write file %s!\n", wav_sync_path);
+        return 1;
+    }
+    fclose(file);
+
+    return 0;
+}
+
 
 static int play_loop(int loop_size_bytes)
 {
@@ -831,8 +1008,13 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        // Loop the audio until told not to (!TODO ???)
+        // Write just input, just drums, and syncronized audio to disk
+        if ((err = write_wavs_to_disk(wav_size))) 
+        {
+            return 1;
+        }
 
+        // Loop the audio until told not to (!TODO ???)
         if ((err = loop_audio_until_cancelled(wav_size)))
         {
             fprintf(stderr, "loop audio returned %d!\n", err);
