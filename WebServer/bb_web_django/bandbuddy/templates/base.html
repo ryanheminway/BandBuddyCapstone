@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
   <head>
@@ -10,7 +11,7 @@
     <div class="container">
       <div class="row justify-content-center">
         <div class="col-8">
-          <h1 class="mt-2">BandBuddy</h1>
+		<img class="img-fluid" src="{% static 'BB_logo_transparent.png' %}" />
           <hr class="mt-0 mb-4">
           {% block content %}
           {% endblock %}

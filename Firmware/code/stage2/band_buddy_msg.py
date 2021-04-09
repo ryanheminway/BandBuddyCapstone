@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/brick/bandbuddy/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
+sys.path.insert(0, '/home/patch/BandBuddyCapstone/Firmware/code/network_bb/flatbuffer_messages')
 import socket
 import flatbuffers
 import Server.Header.Cmds as cmds 
@@ -48,7 +48,7 @@ def create_header(payload_size, destination, cmd, stage_id):
     return builder.Output() 
 
 
-def create_webserver_fbb(genre, timbre, tempo, temperature, bars):
+def create_webserver_fbb(genre, timbre, tempo, temperature, bars, velocity):
     builder = flatbuffers.Builder(0)
     
     webserver.Start(builder)
@@ -57,6 +57,7 @@ def create_webserver_fbb(genre, timbre, tempo, temperature, bars):
     webserver.AddTempo(builder, tempo)
     webserver.AddTemperature(builder, temperature)
     webserver.AddBars(builder, bars)
+    webserver.AddVelocity(builder, velocity)
     webserver_msg = webserver.End(builder)
 
     builder.Finish(webserver_msg) 
@@ -155,13 +156,13 @@ def send_midi_data(sock_fd, raw_data, destination):
     ret = send_payload(sock_fd, raw_data)
     return ret
 
-def send_webserver_data(sock_fd, genre, timbre, tempo, temperature, drums, guitar, bars, destination, stage_id):
+def send_webserver_data(sock_fd, genre, timbre, tempo, temperature, drums, guitar, bars, velocity, destination, stage_id):
     ret = FAILED
 
     if destination == STAGE3:
         webserver_fbb = create_webserver_stage3_fbb(drums, guitar)
     else: 
-        webserver_fbb = create_webserver_fbb(genre, timbre, tempo, temperature, bars)
+        webserver_fbb = create_webserver_fbb(genre, timbre, tempo, temperature, bars, velocity)
 
     payload_size = len(webserver_fbb)
     this_cmd = WEBSERVER_DATA 

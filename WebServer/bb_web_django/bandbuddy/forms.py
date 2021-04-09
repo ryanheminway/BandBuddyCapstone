@@ -20,11 +20,12 @@ class GenreForm(forms.Form):
  
     genre = forms.ChoiceField(choices=bb_types.GENRE_TO_ID)
     timbre = forms.ChoiceField(choices=bb_types.TIMBRE_TO_ID)
-    tempo = forms.IntegerField(max_value=200, min_value=30)
+    tempo = forms.IntegerField(max_value=300, min_value=30)
     temperature = forms.DecimalField(max_value=1, min_value=0)
     bars = forms.ChoiceField(choices=bb_types.BARS_TO_VALUE)
     drums = forms.BooleanField(required=False)
     guitar = forms.BooleanField(required=False)
+    velocity = forms.DecimalField(max_value=1, min_value=0)
 
     def __init__(self, *args,**kwargs):
         self.genre_val = kwargs.pop('genre')
@@ -34,6 +35,7 @@ class GenreForm(forms.Form):
         self.bars_val = kwargs.pop('bars')
         self.drums_val = kwargs.pop('drums')
         self.guitar_val = kwargs.pop('guitar')
+        self.velocity_val = kwargs.pop('velocity')
         super(GenreForm, self).__init__(*args, **kwargs)
         self.fields['genre'].initial = self.genre_val
         self.fields['timbre'].initial= self.timbre_val
@@ -42,3 +44,4 @@ class GenreForm(forms.Form):
         self.fields['bars'].initial = self.bars_val
         self.fields['drums'].initial = self.drums_val
         self.fields['guitar'].initial = self.guitar_val
+        self.fields['velocity'].initial = self.velocity_val

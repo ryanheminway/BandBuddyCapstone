@@ -124,3 +124,6 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
+STATICFILES_DIRS = [
+        '/home/patch/BandBuddyCapstone/WebServer/bb_web_django/static/bandbuddy/images',
+]

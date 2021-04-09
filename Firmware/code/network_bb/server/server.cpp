@@ -32,6 +32,7 @@ int main(int argc, char *argv[])
     int max_sd;
     int destination, cmd, stage_id, payload_size;
     struct sockaddr_in address;
+    uint32_t wav_data_sz;
 
     char buffer[MAX_BUFFER_SIZE]; //data buffer of 1K
 
@@ -185,7 +186,6 @@ int main(int argc, char *argv[])
                         case STAGE1_DATA_READY:
                         {
                             std::cout << "Processing stage 1 data ready" << std::endl;
-                            uint32_t wav_data_sz;
                             int ack_dest = BIG_BROTHER;
                             int ack_src = BACKBONE_SERVER;
                             int dest_sock = BIG_BROTHER;
@@ -212,7 +212,9 @@ int main(int argc, char *argv[])
                             send_ack(client_socket[index], ack_dest, ack_src);
 
                             recieve_and_mem_shared_stage2_data(sd, payload_size);
-                            stage2_data_ready(client_socket[STAGE3], payload_size);
+                            int size = wav_data_sz;
+                            fprintf(stdout, " wave size before sending to stage3 = %d\n,", size);
+                            stage2_data_ready(client_socket[STAGE3], size);
 
                             break;
                         }

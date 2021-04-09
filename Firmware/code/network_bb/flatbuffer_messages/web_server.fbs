@@ -6,6 +6,7 @@ table WebServer{
     tempo: uint32 = 0;
     temperature: double = 0;
     bars: uint32 = 0;
+    velocity: double = 0;
 }
 
 root_type WebServer;
