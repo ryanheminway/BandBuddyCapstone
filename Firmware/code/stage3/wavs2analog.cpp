@@ -44,6 +44,30 @@ static uint8_t* output_buffer_recorded;
 // The size of the internal ring buffer in the capture device: fit at least two periods
 #define PCM_RING_BUFFER_SIZE (BYTES_PER_FRAME * FRAMES_PER_PERIOD * 2)
 
+
+#define PCM_PLAYBACK_RING_BUFFER_FRAMES ((BYTES_PER_PERIOD / 4) / BYTES_PER_FRAME)
+
+
+
+//ALSA example that uses time instead of bytes
+#define CAPTURE_PERIOD_US  ((100000))
+#define CAPTURE_BUFFER_TIME_US   (CAPTURE_PERIOD_US * 5)  
+static unsigned int capture_buffer_time = CAPTURE_BUFFER_TIME_US;       /* ring buffer length in us */
+static unsigned int capture_period_time = CAPTURE_PERIOD_US;       /* period time in us */
+
+static snd_pcm_sframes_t capture_buffer_size;
+static snd_pcm_sframes_t capture_period_size;
+
+//playback handle
+#define PLAYBACK_PERIOD_US  (CAPTURE_PERIOD_US) 
+#define PLAYBACK_BUFFER_TIME_US   (PLAYBACK_PERIOD_US * 5)  
+static unsigned int playback_buffer_time = PLAYBACK_BUFFER_TIME_US;       /* ring buffer length in us */
+static unsigned int playback_period_time = PLAYBACK_PERIOD_US;       /* period time in us */
+
+static snd_pcm_sframes_t playback_buffer_size;
+static snd_pcm_sframes_t playback_period_size;
+
+
 // // The buffer into which to put recorded audio from the user]
 static uint8_t recording_buffer[SYNC_BUFFER_SIZE];
 
@@ -92,8 +116,8 @@ void await_network_backbone()
 // The socket descriptor for the network backbone
 static int networkbb_fd;
 
-//size of midi data from network_bb
-static uint32_t midi_size = 0;
+//size of wav data from network_bb
+static uint32_t wav_data_size = 0;
 
 void start_recording()
 {
@@ -143,12 +167,13 @@ void *wait_button_pressed(void *thread_args)
 
     while (1)
     {
-
         retrieve_header(buffer, networkbb_fd);
         parse_header(buffer, destination, cmd, stage_id, payload_size);
         switch(cmd){
             case STAGE2_DATA_READY:
-                recieve_stage2_fbb(networkbb_fd, payload_size, midi_size);
+                recieve_stage2_fbb(networkbb_fd, payload_size, wav_data_size);
+                wav_data_size -= 44;  // <-- remove the header from the data size
+                fprintf(stdout, "wav data size (+ header): %d\n", wav_data_size + 44);
                 start_recording();
                 break;
             case STOP:
@@ -224,18 +249,25 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
     int16_t norm_midi_max = INT16_MIN, norm_midi_min = INT16_MAX;
     int16_t norm_wav_max = INT16_MIN, norm_wav_min = INT16_MAX;
 
-    for (int i = 44; i < wav_size; i += 2)
+    for (int i = 44, midi_index = 42; i < wav_size; i += 2)
     {
-        int midi_index = i / 2;
+        // Iterate over the drum data half as fast to simulate mono->stereo conversion
+        if (i % 4 == 0)
+        {
+            midi_index += 2;
+        }
+ 
         int16_t midi_word_int = midi[midi_index] | (midi[midi_index + 1] << 8);
         int16_t wav_word_int = wav[i] | (wav[i + 1] << 8);
         if (midi_word_int > norm_midi_max)
         {
             norm_midi_max = midi_word_int;
+            //fprintf(stdout, "midi max: %d\n", norm_midi_max);
         }
         else if (midi_word_int < norm_midi_min)
         {
             norm_midi_min = midi_word_int;
+            //fprintf(stdout, "midi min: %d\n", norm_midi_min);
         }
         if (wav_word_int > norm_wav_max)
         {
@@ -268,7 +300,8 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
         double norm_midi_word = (midi_word / (double)norm_midi_max) * norm_max_avg;
         double norm_wav_word = (wav_word / (double)norm_wav_max) * norm_max_avg;
 
-        double avg_word = (norm_midi_word + norm_wav_word) / 2;
+        //double avg_word = (midi_word + wav_word) / 2;
+        double avg_word = ((norm_midi_word + norm_wav_word) / 2) * 0.752;
         int16_t avg = (int16_t)avg_word;
 
         output_buffer_combined[i - 44] = avg & 0xFF;
@@ -280,17 +313,21 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
     }
 
     // Update the recorded audio buffer pointer to point to the shared memory
-    output_buffer_recorded = midi;
+    output_buffer_recorded = wav + 44; 
 
     return 0;
 }
 
 static int init_playback_handle(uint32_t ring_buffer_size)
 {
-    int err;
 
-    // Open the pisound audio device
-    if ((err = snd_pcm_open(&playback_handle, alsa_capture_device_name, SND_PCM_STREAM_PLAYBACK,  SND_PCM_NONBLOCK)) < 0)
+
+    int err, dir;
+    unsigned int rrate;
+    snd_pcm_uframes_t size;
+
+    // Open the pisound audio device to capture
+    if ((err = snd_pcm_open(&playback_handle, alsa_capture_device_name, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK)) < 0)
     {
         print_error(err, "Cannot open audio device \"%s\"!", alsa_capture_device_name);
         return err;
@@ -304,72 +341,79 @@ static int init_playback_handle(uint32_t ring_buffer_size)
         return err;
     }
 
-    // Initialize the hardware params
-    if ((err = snd_pcm_hw_params_any(playback_handle, hw_params)) < 0)
-    {
-        print_error(err, "Cannot initialize hardware parameters!");
+    err = snd_pcm_hw_params_any(playback_handle, hw_params);
+    if (err < 0) {
+        printf("Broken configuration for playback: no configurations available: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Receive data in interleaved format (vs each channel in completion at a time) to directly write data as WAV
-    if ((err = snd_pcm_hw_params_set_access(playback_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0)
-    {
-        print_error(err, "Cannot set access type to interleaved!");
+    /* set hardware resampling */
+    err = snd_pcm_hw_params_set_rate_resample(playback_handle, hw_params, 1);
+    if (err < 0) {
+        printf("Resampling setup failed for playback: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Receive data as unsigned 16-bit frames
-    if ((err = snd_pcm_hw_params_set_format(playback_handle, hw_params, SND_PCM_FORMAT_S16)) < 0)
-    {
-        print_error(err, "Cannot set frame format to unsigned 16-bit!");
+    /* set the interleaved read/write format */
+    err = snd_pcm_hw_params_set_access(playback_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+    if (err < 0) {
+        printf("Access type not available for playback: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Target 48KHz; if that isn't possible, something has gone wrong
-    unsigned int rate = SAMPLE_RATE;
-    if ((err = snd_pcm_hw_params_set_rate_near(playback_handle, hw_params, &rate, 0)) < 0)
-    {
-        print_error(err, "Could not set sample rate: pcm call failed!\n");
-        return err;
-    }
-    if (rate != SAMPLE_RATE)
-    {
-        fprintf(stderr, "Could not set sample rate: target %d, returned %d!\n", SAMPLE_RATE, rate);
-        return 1;
-    }
-
-    // Capture stereo audio
-    if ((err = snd_pcm_hw_params_set_channels(playback_handle, hw_params, 2)) < 0)
-    {
-        print_error(err, "Could not request stereo audio!\n");
+    /* set the sample format */
+    err = snd_pcm_hw_params_set_format(playback_handle, hw_params, SND_PCM_FORMAT_S16);
+    if (err < 0) {
+        printf("Sample format not available for playback: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Set the period size
-    snd_pcm_uframes_t num_frames = ((ring_buffer_size / BYTES_PER_FRAME) / 2);
-    if ((err = snd_pcm_hw_params_set_period_size_near(playback_handle, hw_params, &num_frames, 0)) < 0)
-    {
-        print_error(err, "Could not set the period size!\n");
+
+    /* set the count of channels */
+    err = snd_pcm_hw_params_set_channels(playback_handle, hw_params, 2);
+    if (err < 0) {
+        printf("Channels count (%u) not available for playbacks: %s\n", 2, snd_strerror(err));
         return err;
     }
-    if (num_frames != ((ring_buffer_size / BYTES_PER_FRAME) / 2))
-    {
-        fprintf(stderr, "Could not set frames/period: target %d, returned %lu!\n", FRAMES_PER_PERIOD, num_frames);
-        return 1;
-    }
-
-    // Set the pcm ring buffer size
-    // (NOTE Ryan Heminway) dividing by 8 instead of 2 
-    if ((err = snd_pcm_hw_params_set_buffer_size(playback_handle, hw_params, ring_buffer_size)) < 0)
-    {
-        print_error(err, "Cannot set playback handle ring buffer size!");
+    /* set the stream rate */
+    rrate = SAMPLE_RATE;
+    err = snd_pcm_hw_params_set_rate_near(playback_handle, hw_params, &rrate, 0);
+    if (err < 0) {
+        printf("Rate %uHz not available for playback: %s\n", SAMPLE_RATE, snd_strerror(err));
         return err;
     }
-
-    // Deliver the hardware params to the handle
-    if ((err = snd_pcm_hw_params(playback_handle, hw_params)) < 0)
-    {
-        print_error(err, "Could not deliver hardware parameters to the capture device!");
+    if (rrate != SAMPLE_RATE) {
+        printf("Rate doesn't match (requested %uHz, get %iHz)\n", SAMPLE_RATE, err);
+        return -EINVAL;
+    }
+    /* set the buffer time */
+    err = snd_pcm_hw_params_set_buffer_time_near(playback_handle, hw_params, &playback_buffer_time, &dir);
+    if (err < 0) {
+        printf("Unable to set buffer time %u for playback: %s\n", playback_buffer_time, snd_strerror(err));
+        return err;
+    }
+    err = snd_pcm_hw_params_get_buffer_size(hw_params, &size);
+    if (err < 0) {
+        printf("Unable to get buffer size for playback: %s\n", snd_strerror(err));
+        return err;
+    }
+    playback_buffer_size = size;
+    /* set the period time */
+    err = snd_pcm_hw_params_set_period_time_near(playback_handle, hw_params, &playback_period_time, &dir);
+    if (err < 0) {
+        printf("Unable to set period time %u for playback: %s\n", playback_period_time, snd_strerror(err));
+        return err;
+    }
+    err = snd_pcm_hw_params_get_period_size(hw_params, &size, &dir);
+    if (err < 0) {
+        printf("Unable to get period size for playback: %s\n", snd_strerror(err));
+        return err;
+    }
+    playback_period_size = size;
+    /* write the parameters to device */
+    err = snd_pcm_hw_params(playback_handle, hw_params);
+    if (err < 0) {
+        printf("Unable to set hw params for playback: %s\n", snd_strerror(err));
         return err;
     }
 
@@ -383,43 +427,54 @@ static int init_playback_handle(uint32_t ring_buffer_size)
         print_error(err, "Could not allocate software parameters for the capture device!");
         return err;
     }
-
-    // Initialize the software parameters
-    if ((err = snd_pcm_sw_params_current(playback_handle, sw_params)) < 0)
-    {
-        print_error(err, "Could not initialize the software parameters for the capture device!");
+    /* get the current swparams */
+    err = snd_pcm_sw_params_current(playback_handle, sw_params);
+    if (err < 0) {
+        printf("Unable to determine current swparams for playback: %s\n", snd_strerror(err));
+        return err;
+    }
+    /* start the transfer when the buffer is almost full: */
+    /* (buffer_size / avail_min) * avail_min */
+    err = snd_pcm_sw_params_set_start_threshold(playback_handle, sw_params, playback_period_size);
+    if (err < 0) {
+        printf("Unable to set start threshold mode for playback: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Set the software parameters
-    if ((err = snd_pcm_sw_params(playback_handle, sw_params)) < 0)
-    {
-        print_error(err, "Could not deliver the software parameters to the capture device!");
+    err = snd_pcm_sw_params_set_period_event(playback_handle, sw_params, 1);
+    if (err < 0) {
+        printf("Unable to set period event: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Set the minimum available frames for a wakeup to the ring buffer size
-    if ((err = snd_pcm_sw_params_set_avail_min(playback_handle, sw_params, ring_buffer_size / 2)) < 0)
-    {
-        print_error(err, "Could not set the frame wakeup limit!");
+
+    /* allow the transfer when at least period_size samples can be processed */
+    /* or disable this mechanism when period event is enabled (aka interrupt like style processing) */
+    err = snd_pcm_sw_params_set_avail_min(playback_handle, sw_params, playback_period_size);
+    if (err < 0) {
+        printf("Unable to set avail min for playback: %s\n", snd_strerror(err));
         return err;
     }
 
+    
+    /* write the parameters to the playback device */
+    err = snd_pcm_sw_params(playback_handle, sw_params);
+    if (err < 0) {
+        printf("Unable to set sw params for playback: %s\n", snd_strerror(err));
+        return err;
+    }
 
     // Free the sw params
     snd_pcm_sw_params_free(sw_params);
-
-    // Prepare and start the device
-    snd_pcm_prepare(playback_handle);
-    //snd_pcm_start(playback_handle);
-
     return 0;
 }
 
 // Initalize the capture handle for audio capture. Returns 0 on success, errno on failure.
-int init_capture_handle(uint32_t ring_buffer_size)
+int init_capture_handle()
 {
-    int err;
+    int err, dir;
+    unsigned int rrate;
+    snd_pcm_uframes_t size;
 
     // Open the pisound audio device to capture
     if ((err = snd_pcm_open(&capture_handle, alsa_capture_device_name, SND_PCM_STREAM_CAPTURE, SND_PCM_NONBLOCK)) < 0)
@@ -436,66 +491,79 @@ int init_capture_handle(uint32_t ring_buffer_size)
         return err;
     }
 
-    // Initialize the hardware params
-    if ((err = snd_pcm_hw_params_any(capture_handle, hw_params)) < 0)
-    {
-        print_error(err, "Cannot initialize hardware parameters!");
+    err = snd_pcm_hw_params_any(capture_handle, hw_params);
+    if (err < 0) {
+        printf("Broken configuration for playback: no configurations available: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Receive data in interleaved format (vs each channel in completion at a time) to directly write data as WAV
-    if ((err = snd_pcm_hw_params_set_access(capture_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0)
-    {
-        print_error(err, "Cannot set access type to interleaved!");
+    /* set hardware resampling */
+    err = snd_pcm_hw_params_set_rate_resample(capture_handle, hw_params, 1);
+    if (err < 0) {
+        printf("Resampling setup failed for playback: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Receive data as unsigned 24-bit frames
-    if ((err = snd_pcm_hw_params_set_format(capture_handle, hw_params, SND_PCM_FORMAT_S16)) < 0)
-    {
-        print_error(err, "Cannot set frame format to unsigned 24-bit!");
+    /* set the interleaved read/write format */
+    err = snd_pcm_hw_params_set_access(capture_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+    if (err < 0) {
+        printf("Access type not available for playback: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Set the pcm ring buffer size
-    if ((err = snd_pcm_hw_params_set_buffer_size(capture_handle, hw_params, ring_buffer_size)) < 0)
-    {
-        print_error(err, "Cannot set capture handle ring buffer size!");
+    /* set the sample format */
+    err = snd_pcm_hw_params_set_format(capture_handle, hw_params, SND_PCM_FORMAT_S16);
+    if (err < 0) {
+        printf("Sample format not available for playback: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Target 48KHz; if that isn't possible, something has gone wrong
-    unsigned int rate = SAMPLE_RATE;
-    if ((err = snd_pcm_hw_params_set_rate_near(capture_handle, hw_params, &rate, 0)) < 0)
-    {
-        print_error(err, "Could not set sample rate: pcm call failed!");
+
+    /* set the count of channels */
+    err = snd_pcm_hw_params_set_channels(capture_handle, hw_params, 2);
+    if (err < 0) {
+        printf("Channels count (%u) not available for playbacks: %s\n", 2, snd_strerror(err));
         return err;
     }
-    if (rate != SAMPLE_RATE)
-    {
-        fprintf(stderr, "Could not set sample rate: target %d, returned %d!\n", SAMPLE_RATE, rate);
-        return 1;
-    }
-
-    // Capture stereo audio
-    if ((err = snd_pcm_hw_params_set_channels(capture_handle, hw_params, 2)) < 0)
-    {
-        print_error(err, "Could not request stereo audio!");
+    /* set the stream rate */
+    rrate = SAMPLE_RATE;
+    err = snd_pcm_hw_params_set_rate_near(capture_handle, hw_params, &rrate, 0);
+    if (err < 0) {
+        printf("Rate %uHz not available for playback: %s\n", SAMPLE_RATE, snd_strerror(err));
         return err;
     }
-
-     // Set the period size
-    snd_pcm_uframes_t num_frames = ((ring_buffer_size / BYTES_PER_FRAME) / 2);
-    if ((err = snd_pcm_hw_params_set_period_size_near(capture_handle, hw_params, &num_frames, 0)) < 0)
-    {
-        print_error(err, "Could not set the period size!\n");
+    if (rrate != SAMPLE_RATE) {
+        printf("Rate doesn't match (requested %uHz, get %iHz)\n", SAMPLE_RATE, err);
+        return -EINVAL;
+    }
+    /* set the buffer time */
+    err = snd_pcm_hw_params_set_buffer_time_near(capture_handle, hw_params, &capture_buffer_time, &dir);
+    if (err < 0) {
+        printf("Unable to set buffer time %u for playback: %s\n", capture_buffer_time, snd_strerror(err));
         return err;
     }
-
-    // Deliver the hardware params to the handle
-    if ((err = snd_pcm_hw_params(capture_handle, hw_params)) < 0)
-    {
-        print_error(err, "Could not deliver hardware parameters to the capture device!");
+    err = snd_pcm_hw_params_get_buffer_size(hw_params, &size);
+    if (err < 0) {
+        printf("Unable to get buffer size for playback: %s\n", snd_strerror(err));
+        return err;
+    }
+    capture_buffer_size = size;
+    /* set the period time */
+    err = snd_pcm_hw_params_set_period_time_near(capture_handle, hw_params, &capture_period_time, &dir);
+    if (err < 0) {
+        printf("Unable to set period time %u for playback: %s\n", capture_period_time, snd_strerror(err));
+        return err;
+    }
+    err = snd_pcm_hw_params_get_period_size(hw_params, &size, &dir);
+    if (err < 0) {
+        printf("Unable to get period size for playback: %s\n", snd_strerror(err));
+        return err;
+    }
+    capture_period_size = size;
+    /* write the parameters to device */
+    err = snd_pcm_hw_params(capture_handle, hw_params);
+    if (err < 0) {
+        printf("Unable to set hw params for playback: %s\n", snd_strerror(err));
         return err;
     }
 
@@ -509,38 +577,53 @@ int init_capture_handle(uint32_t ring_buffer_size)
         print_error(err, "Could not allocate software parameters for the capture device!");
         return err;
     }
-
-    // Initialize the software parameters
-    if ((err = snd_pcm_sw_params_current(capture_handle, sw_params)) < 0)
-    {
-        print_error(err, "Could not initialize the software parameters for the capture device!");
+    /* get the current swparams */
+    err = snd_pcm_sw_params_current(capture_handle, sw_params);
+    if (err < 0) {
+        printf("Unable to determine current swparams for playback: %s\n", snd_strerror(err));
+        return err;
+    }
+    /* start the transfer when the buffer is almost full: */
+    /* (buffer_size / avail_min) * avail_min */
+    err = snd_pcm_sw_params_set_start_threshold(capture_handle, sw_params, 1);
+    if (err < 0) {
+        printf("Unable to set start threshold mode for playback: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Set the minimum available frames for a wakeup to the ring buffer size
-    if ((err = snd_pcm_sw_params_set_avail_min(capture_handle, sw_params, FRAMES_PER_PERIOD)) < 0)
-    {
-        print_error(err, "Could not set the frame wakeup limit!");
+
+    /* allow the transfer when at least period_size samples can be processed */
+    /* or disable this mechanism when period event is enabled (aka interrupt like style processing) */
+    err = snd_pcm_sw_params_set_avail_min(capture_handle, sw_params, capture_period_size);
+    if (err < 0) {
+        printf("Unable to set avail min for playback: %s\n", snd_strerror(err));
         return err;
     }
 
-    // Set the software parameters
-    if ((err = snd_pcm_sw_params(capture_handle, sw_params)) < 0)
-    {
-        print_error(err, "Could not deliver the software parameters to the capture device!");
+    err = snd_pcm_sw_params_set_period_event(capture_handle, sw_params, 1);
+    if (err < 0) {
+        printf("Unable to set period event: %s\n", snd_strerror(err));
+        return err;
+    }
+
+    
+    /* write the parameters to the playback device */
+    err = snd_pcm_sw_params(capture_handle, sw_params);
+    if (err < 0) {
+        printf("Unable to set sw params for playback: %s\n", snd_strerror(err));
         return err;
     }
 
     // Free the sw params
     snd_pcm_sw_params_free(sw_params);
-
     return 0;
+
 }
 
 // The path of the input wav on disk
-static const char* wav_input_path = "/home/patch/input.wav";
-static const char* wav_drums_path = "/home/patch/drums.wav";
-static const char* wav_sync_path = "/home/patch/sync.wav";
+static const char* wav_input_path = "/home/patch/wavs/input.wav";
+static const char* wav_drums_path = "/home/patch/wavs/drums.wav";
+static const char* wav_sync_path = "/home/patch/wavs/sync.wav";
 
 // Big-Endian
 void uint32_to_uint8_array_BE(uint8_t *array, uint32_t value)
@@ -661,23 +744,54 @@ int write_wav_header(FILE* file, int file_size)
 
 int write_wav_to_disk(FILE* file, uint8_t* buffer, int file_size)
 {
-    return write_wav_header(file, file_size) || 
-    (fwrite(buffer, sizeof(uint8_t), file_size, file) != file_size);
+    if (write_wav_header(file, file_size)) {
+        fprintf(stderr, "%s\n", "Failed to write header!");
+        return 1;
+    }
+
+    // int written = 0;
+    // while (written < file_size)
+    // {
+    //     int this_turn = fwrite(buffer + written, sizeof(uint8_t), 1024, file);
+    //     if (this_turn != 1024 && written + this_turn != file_size)
+    //     {
+    //         perror("Perror: ");
+    //         fprintf(stderr, "fwrite: expected %d, wrote %d (ferror = %d)!\n", 
+    //             file_size, written, ferror(file)); 
+    //         return 1;
+    //     }
+
+    //     written += 1024;
+    // }
+
+    int amount_written = fwrite(buffer, sizeof(uint8_t), file_size, file);
+    if (amount_written != file_size)
+    {
+        perror("Perror: ");
+        fprintf(stderr, "fwrite: expected %d, wrote %d (ferror = %d)!\n", 
+            file_size, amount_written, ferror(file)); 
+        return 1;
+    }
+
+    return 0;
 }
 
 int write_wavs_to_disk(int file_size)
 {
     // Open the file, write the header, write the contents
-    FILE *file = fopen(wav_input_path, "w");
+    fprintf(stdout, "File size: %d\n", file_size);
+    FILE *file = fopen(wav_input_path, "wb");
     if (!file)
     {
         fprintf(stderr, "Failed to open file %s!\n", wav_input_path);
+        fclose(file);
         return 1;
     }
 
     if (write_wav_to_disk(file, output_buffer_recorded, file_size))
     {
         fprintf(stderr, "Failed to write to file %s!\n", wav_input_path);
+        fclose(file);
         return 1;
     }
 
@@ -687,12 +801,14 @@ int write_wavs_to_disk(int file_size)
     if (!file)
     {
         fprintf(stderr, "Failed to open file %s!\n", wav_input_path);
+        fclose(file);
         return 1;
     }
 
     if (write_wav_to_disk(file, output_buffer_drum, file_size))
     {
         fprintf(stderr, "Failed to write file %s!\n", wav_drums_path);
+        fclose(file);
         return 1;
     }
     fclose(file);
@@ -701,12 +817,14 @@ int write_wavs_to_disk(int file_size)
     if (!file)
     {
         fprintf(stderr, "Failed to open file %s!\n", wav_sync_path);
+        fclose(file);
         return 1;
     }
 
     if (write_wav_to_disk(file, output_buffer_combined, file_size))
     {
         fprintf(stderr, "Failed to write file %s!\n", wav_sync_path);
+        fclose(file);
         return 1;
     }
     fclose(file);
@@ -719,6 +837,8 @@ static int play_loop(int loop_size_bytes)
 {
     int sample_index = 0, err = 0;
     uint8_t* buffer_to_play;
+
+    //fprintf(stdout, "made it to buffer\n");
 
     while (sample_index < loop_size_bytes)
     {
@@ -759,29 +879,35 @@ static int play_loop(int loop_size_bytes)
             }
         }
 
-        if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
+        if ((err = snd_pcm_wait(playback_handle, -1)) < 0)
         {
-            print_error(err, "Poll failed!\n");
-            return err;
+            print_error(err, "Poll failed! play_loop\n");
+            snd_pcm_prepare(playback_handle);
+            //snd_pcm_recover(playback_handle, err, 0);
+            continue;
         }
 
         int frames_to_deliver;
-        if ((frames_to_deliver = snd_pcm_avail_update(playback_handle)) < 0)
+        if ((frames_to_deliver = snd_pcm_avail(playback_handle)) < 0)
         {
             if (frames_to_deliver == -EPIPE)
             {
                 print_error(frames_to_deliver, "An xrun occurred!");
-                return frames_to_deliver;
+                snd_pcm_prepare(playback_handle);
+                //return frames_to_deliver;
             }
             else
             {
                 print_error(frames_to_deliver, "An unknown error occurred!\n");
-                return frames_to_deliver;
+                snd_pcm_prepare(playback_handle);
+                //return frames_to_deliver;
             }
         }
 
+        //fprintf(stdout, "frames to deliver = %d\n", frames_to_deliver);
+
         // Cap the frames to write
-        //frames_to_deliver = (frames_to_deliver > FRAMES_PER_PERIOD) ? FRAMES_PER_PERIOD : frames_to_deliver;
+        //frames_to_deliver = (frames_to_deliver > 100) ? 100 : frames_to_deliver;
 
         for (int i = sample_index; i < sample_index + (frames_to_deliver * BYTES_PER_FRAME); i += 2)
         {
@@ -818,6 +944,7 @@ static int play_loop(int loop_size_bytes)
         else 
         {
             sample_index += BYTES_PER_FRAME * frames_written;
+            //fprintf(stdout, "frames written = %d\n", frames_written);
         }
     }
 
@@ -831,6 +958,11 @@ static void async_record_until_button_press(int loop_size_bytes)
     bool overtook = false;
     bool spawned_thread = false;
 
+   if ((err = snd_pcm_prepare(capture_handle)) < 0)
+    {
+        print_error(err, "Could not start capture handle!");
+    } 
+
     if ((err = snd_pcm_start(capture_handle)) < 0)
     {
         print_error(err, "Could not start capture handle!");
@@ -840,14 +972,14 @@ static void async_record_until_button_press(int loop_size_bytes)
     while (!is_button_pressed.load(std::memory_order::memory_order_relaxed))
     {
         // Await a new set of data
-        if ((err = snd_pcm_wait(capture_handle, 1000)) < 0)
+        if ((err = snd_pcm_wait(capture_handle, -1)) < 0)
         {
             print_error(err, "Capture wait failed!");
             return;
         }
 
         snd_pcm_sframes_t frames_available = snd_pcm_avail_update(capture_handle);
-        if (frames_available < FRAMES_PER_PERIOD)
+       /* if (frames_available < FRAMES_PER_PERIOD)
         {
             fprintf(stderr, "Too few frames received: expected %d, received %lu!\n", FRAMES_PER_PERIOD, frames_available);
             return;
@@ -857,10 +989,11 @@ static void async_record_until_button_press(int loop_size_bytes)
         if (frames_available != FRAMES_PER_PERIOD)
         {
             fprintf(stderr, "Expected %d frames, but %lu are ready. Monitor for overflow?", FRAMES_PER_PERIOD, frames_available);
-        }
+        }*/
+        frames_available = (frames_available > capture_period_size) ? capture_period_size : frames_available;
 
         // Read one period, even if more is available
-        if ((err = snd_pcm_readi(capture_handle, recording_buffer + num_bytes_read, FRAMES_PER_PERIOD)) != FRAMES_PER_PERIOD)
+        if ((err = snd_pcm_readi(capture_handle, recording_buffer + num_bytes_read, frames_available)) != frames_available)
         {
             print_error(err, "Frame read failed!");
             return;
@@ -868,14 +1001,17 @@ static void async_record_until_button_press(int loop_size_bytes)
 
         //fprintf(stdout, "Num_bytes_Read = %d\n", num_bytes_read);
 
-        num_bytes_read += BYTES_PER_PERIOD; 
+        num_bytes_read += capture_period_size * BYTES_PER_FRAME; 
 
-        if (!spawned_thread && num_bytes_read == BYTES_PER_PERIOD * 3)
+        if (!spawned_thread && num_bytes_read == (capture_period_size * BYTES_PER_FRAME) * 2)
         {
             producer_thread = std::thread([&]() { 
                     fprintf(stdout, "Starting to play: recorded %d bytes\n", num_bytes_read); 
+                    snd_pcm_prepare(playback_handle);
+                    snd_pcm_start(playback_handle);
                     while (play_loop(loop_size_bytes) == 0); 
                 });
+
             spawned_thread = true;
         }
 
@@ -898,12 +1034,12 @@ static int loop_audio_until_cancelled(int loop_size)
     int err;
 
     // Initialize the playback handle
-    if ((err = init_playback_handle(BYTES_PER_PERIOD / 4)))
+    if ((err = init_playback_handle(512)))
     {
         return 1;
     }
 
-    if ((err = init_capture_handle(BYTES_PER_PERIOD)))
+    if ((err = init_capture_handle()))
     {
         return 1;
     } 
@@ -982,7 +1118,7 @@ int main(int argc, char **argv)
         await_network_backbone();
 
         // Retrieve the shared memory pointers
-        uint8_t *midi = (uint8_t *)get_midi_mem_blk(midi_size);
+        uint8_t *midi = (uint8_t *)get_midi_mem_blk(0);
         if (!midi)
         {
             fprintf(stderr, "%s\n", "Unable to retrieve midi shared memory pointer!");
@@ -990,8 +1126,9 @@ int main(int argc, char **argv)
         }
 
 #warning *** WAV MEMBLK SIZE ASSUMED TO BE == TO MIDI MEMBLK!!! ***
-        int wav_size = 921600;
-        midi_size = wav_size / 2;
+
+        //int wav_size = 921600;
+        int midi_size = wav_data_size / 2;
         
         //int wav_size = midi_size * 2;
         uint8_t *wav = (uint8_t *)get_wav_mem_blk(0);
@@ -1002,20 +1139,20 @@ int main(int argc, char **argv)
         }
 
         // Synchronize the buffered wav and the return data
-        if (synchronize_wavs(midi, midi_size, wav, wav_size))
+        if (synchronize_wavs(midi, midi_size, wav, wav_data_size))
         {
             fprintf(stderr, "%s\n", "Failed to synchronize the wav files!");
             return 1;
         }
 
         // Write just input, just drums, and syncronized audio to disk
-        if ((err = write_wavs_to_disk(wav_size))) 
+        if ((err = write_wavs_to_disk(wav_data_size))) 
         {
             return 1;
         }
 
         // Loop the audio until told not to (!TODO ???)
-        if ((err = loop_audio_until_cancelled(wav_size)))
+        if ((err = loop_audio_until_cancelled(wav_data_size)))
         {
             fprintf(stderr, "loop audio returned %d!\n", err);
         }
@@ -1028,7 +1165,10 @@ int main(int argc, char **argv)
         }
 
         // Send the ACK to big brother
-        producer_thread.join();
+        if (producer_thread.joinable()) {
+            producer_thread.join();
+        }
+
         int this_stage_id = STAGE3;
         int this_destination = BIG_BROTHER; 
         send_ack(networkbb_fd, this_destination, this_stage_id);
