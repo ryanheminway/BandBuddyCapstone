@@ -37,7 +37,7 @@
 // The number of bytes per period
 
 // For now, hold 1024 periods in the mem buffer
-static uint8_t buffer[32];
+static uint8_t buffer[1024 * 1024 * 256];
 
 // The ALSA capture handle
 static snd_pcm_t *capture_handle;
