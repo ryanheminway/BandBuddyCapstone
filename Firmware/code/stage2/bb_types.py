@@ -10,6 +10,11 @@ GENRE_TO_ID = (
         (2, "Jazz"),
         (3, "Pop"),
         (4, "Hiphop"),
+        (5, "Soul"),
+        (6, "Country"),
+        (7, "Funk"),
+        (8, "Blues"),
+        (9, "Reggae"),
 )
 
 ID_TO_MODEL = {
@@ -18,6 +23,11 @@ ID_TO_MODEL = {
         2 : "groovae_jazz/jazz.tar",
         3 : "groovae_pop/pop.tar",
         4 : "groovae_hiphop/hiphop.tar",
+        5 : "groovae_soul/soul.tar",
+        6 : "groovae_country/country.tar",
+        7 : "groovae_funk/funk.tar",
+        8 : "groovae_blues/blues.tar",
+        9 : "groovae_reggae/reggae.tar",
         }
 
 TIMBRE_TO_ID = (

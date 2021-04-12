@@ -93,7 +93,7 @@ void await_network_backbone()
 static int networkbb_fd;
 
 //size of midi data from network_bb
-static uint32_t midi_size = 0;
+static uint32_t wav_data_size = 0;
 
 void start_recording()
 {
@@ -143,12 +143,13 @@ void *wait_button_pressed(void *thread_args)
 
     while (1)
     {
-
         retrieve_header(buffer, networkbb_fd);
         parse_header(buffer, destination, cmd, stage_id, payload_size);
         switch(cmd){
             case STAGE2_DATA_READY:
-                recieve_stage2_fbb(networkbb_fd, payload_size, midi_size);
+                recieve_stage2_fbb(networkbb_fd, payload_size, wav_data_size);
+                wav_data_size -= 44;
+                fprintf(stdout, "wav data size (with header): %d\n", wav_data_size + 44);
                 start_recording();
                 break;
             case STOP:
@@ -201,14 +202,14 @@ int connect_networkbb()
 static int await_message_from_backbone()
 {
     // Retrieve the info from the backbone
-    uint32_t midi_size;
-    if (recieve_header_and_stage2_fbb(networkbb_fd, midi_size) == FAILED)
+    uint32_t wav_data_size;
+    if (recieve_header_and_stage2_fbb(networkbb_fd, wav_data_size) == FAILED)
     {
         fprintf(stderr, "%s\n", "Awaiting backbone ping failed!");
         return 1;
     }
 
-    return midi_size;
+    return wav_data_size;
 }
 
 static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_size)
@@ -268,7 +269,7 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
         double norm_midi_word = (midi_word / (double)norm_midi_max) * norm_max_avg;
         double norm_wav_word = (wav_word / (double)norm_wav_max) * norm_max_avg;
 
-        double avg_word = (norm_midi_word + norm_wav_word) / 2;
+        double avg_word = ((norm_midi_word + norm_wav_word) / 2) * 0.752;
         int16_t avg = (int16_t)avg_word;
 
         output_buffer_combined[i - 44] = avg & 0xFF;
@@ -280,7 +281,7 @@ static int synchronize_wavs(uint8_t *midi, int midi_size, uint8_t *wav, int wav_
     }
 
     // Update the recorded audio buffer pointer to point to the shared memory
-    output_buffer_recorded = midi;
+    output_buffer_recorded = wav + 44;
 
     return 0;
 }
@@ -762,7 +763,8 @@ static int play_loop(int loop_size_bytes)
         if ((err = snd_pcm_wait(playback_handle, 1000)) < 0)
         {
             print_error(err, "Poll failed!\n");
-            return err;
+            snd_pcm_prepare(playback_handle);
+            continue;
         }
 
         int frames_to_deliver;
@@ -876,6 +878,8 @@ static void async_record_until_button_press(int loop_size_bytes)
                     fprintf(stdout, "Starting to play: recorded %d bytes\n", num_bytes_read); 
                     while (play_loop(loop_size_bytes) == 0); 
                 });
+
+
             spawned_thread = true;
         }
 
@@ -982,7 +986,7 @@ int main(int argc, char **argv)
         await_network_backbone();
 
         // Retrieve the shared memory pointers
-        uint8_t *midi = (uint8_t *)get_midi_mem_blk(midi_size);
+        uint8_t *midi = (uint8_t *)get_midi_mem_blk(0);
         if (!midi)
         {
             fprintf(stderr, "%s\n", "Unable to retrieve midi shared memory pointer!");
@@ -990,10 +994,8 @@ int main(int argc, char **argv)
         }
 
 #warning *** WAV MEMBLK SIZE ASSUMED TO BE == TO MIDI MEMBLK!!! ***
-        int wav_size = 921600;
-        midi_size = wav_size / 2;
+        int midi_size = wav_data_size / 2;
         
-        //int wav_size = midi_size * 2;
         uint8_t *wav = (uint8_t *)get_wav_mem_blk(0);
         if (!wav)
         {
@@ -1002,20 +1004,20 @@ int main(int argc, char **argv)
         }
 
         // Synchronize the buffered wav and the return data
-        if (synchronize_wavs(midi, midi_size, wav, wav_size))
+        if (synchronize_wavs(midi, midi_size, wav, wav_data_size))
         {
             fprintf(stderr, "%s\n", "Failed to synchronize the wav files!");
             return 1;
         }
 
         // Write just input, just drums, and syncronized audio to disk
-        if ((err = write_wavs_to_disk(wav_size))) 
+        if ((err = write_wavs_to_disk(wav_data_size))) 
         {
             return 1;
         }
 
         // Loop the audio until told not to (!TODO ???)
-        if ((err = loop_audio_until_cancelled(wav_size)))
+        if ((err = loop_audio_until_cancelled(wav_data_size)))
         {
             fprintf(stderr, "loop audio returned %d!\n", err);
         }

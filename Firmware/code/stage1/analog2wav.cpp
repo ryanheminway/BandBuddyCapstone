@@ -18,6 +18,7 @@
 #include "band_buddy_server.h"
 
 #define DEFAULT_BPM 100
+#define DEFAULT_NUM_MEASURES 2
 
 // Sample rate: use 48k for now
 #define SAMPLE_RATE 48000
@@ -60,6 +61,7 @@ static std::atomic_bool main_thread_stop_status;
 
 //beats per minute. Will be updated by the webserver
 static std::atomic_uint8_t bpm;
+static std::atomic_uint8_t num_measures;
 
 // The mutex upon which to lock the condition variable
 static std::mutex is_button_pressed_mutex;
@@ -132,6 +134,7 @@ static void handle_webserver_data(int &socket_fd, int &payload_size) {
     fprintf(stdout, "temp  = %d\n", tempo);
     fprintf(stdout, "bars = %d\n", bars);
     bpm.store(tempo, std::memory_order::memory_order_seq_cst);
+    num_measures.store(bars, std::memory_order_seq_cst);
 }
 
 
@@ -789,7 +792,7 @@ static int metronome()
 
     // Return the number of samples for 'n' measures of recording
     #warning "*** NUM SAMPLES ASSUMED TO BE 2 FOR NOW ***"
-    return metronome_buffer_size * 2;
+    return metronome_buffer_size * num_measures.load(std::memory_order_relaxed);
 }
 
 int close_networkbb_fd()
@@ -1084,6 +1087,7 @@ int main(int, char *[])
 
     // Set BPM to default 
     bpm.store(DEFAULT_BPM, std::memory_order::memory_order_seq_cst);
+    num_measures.store(DEFAULT_NUM_MEASURES, std::memory_order::memory_order_seq_cst);
 
     // Initialize the server connection
     if (connect_networkbb() == FAILED)
