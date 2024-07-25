@@ -1,6 +1,6 @@
 # BandBuddy
 
-BandBuddy is an experimental product that was designed for the 2021 ECE Senior Capstone at Northeastern University. Our team featured members: Ryan Heminway, Sam Paniccia, Walter Galdamez, Rubens Lacouture, and Brickman Malham. Ultimately, our team won 3rd place among all ECE submissions for our work. The judges recognized our innovative combination of hardware and software techniques, deploying machine learning models on a Jetson Nano which, at the time in 2021, was an uncommon feat.  
+BandBuddy is an experimental product that was designed for the 2021 ECE Senior Capstone at Northeastern University. Our team featured members: Ryan Heminway, Sam Paniccia, Walter Galdamez, Rubens Lacouture, and Brickman Malham. Ultimately, **our team won 3rd place among all ECE submissions** for our work. The judges recognized our innovative combination of hardware and software techniques, deploying machine learning models on a Jetson Nano which, at the time in 2021, was an uncommon feat.  
 
 ## About
 
