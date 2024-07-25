@@ -10,6 +10,6 @@ Our system leveraged Magenta GrooVAE models for the drum generation, and trained
 
 While the code in this repository is quite specific to our project, we have structured it into organized folders of ML, Data, Firmware, and Webserver for review. We hope our work can inspire future individuals who have a similar passion for combining their technical engineering skills with their musical hobbies.
 
-## Demonstrations
+## Demo Video
 
 Unfortunately, this project was heavily impacted by the Covid-19 pandemic, which prevented us from conducting a conference-style demonstration to our 2021 cohort in-person. In lieu of this, we recorded a presentation which featured a design overview with demonstrations of the product and its capabilities. Although GitHub's free plan does not permit us to upload a video of this size directly, you can view our [BandBuddy Presentation Video Here](https://drive.google.com/file/d/1wapezHUzZOpXx3CwB58EvInzfpDUlrSQ/view?usp=sharing). Skip to 6:45 mark if you are purely interested in the product demonstration (Ryan Heminway using the pedal with his bass). 
